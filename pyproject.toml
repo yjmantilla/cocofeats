@@ -25,7 +25,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
-dependencies = []
+dependencies = ["mne"]
 
 [project.urls]
 Homepage = "https://github.com/yjmantilla/cocofeats"
