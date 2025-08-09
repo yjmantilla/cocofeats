@@ -1,0 +1,117 @@
+[build-system]
+requires = ["hatchling>=1.25", "hatch-vcs>=0.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "package_template"
+dynamic = ["version"]
+description = "A modern Python package template with Sphinx docs (gallery) and CI/CD."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Your Name", email = "you@example.com" },
+]
+keywords = ["template", "python", "package", "sphinx", "sphinx-gallery", "ci", "cookiecutter"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/your-org/package_template"
+Documentation = "https://your-org.github.io/package_template/"
+Repository = "https://github.com/your-org/package_template"
+Issues = "https://github.com/your-org/package_template/issues"
+
+[project.optional-dependencies]
+dev = [
+  "black>=24.3",
+  "ruff>=0.5",
+  "mypy>=1.10",
+  "pre-commit>=3.7",
+  "build>=1.2",
+]
+
+test = [
+  "pytest>=8.2",
+  "pytest-cov>=5.0",
+]
+
+docs = [
+  "sphinx>=7.3",
+  "furo>=2024.1.29",
+  "myst-parser>=2.0",
+  "sphinx-autodoc-typehints>=2.1",
+  "sphinx-gallery>=0.16",
+  "matplotlib>=3.7",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+  "E", "W",      # pycodestyle
+  "F",            # pyflakes
+  "I",            # isort
+  "B",            # flake8-bugbear
+  "UP",           # pyupgrade
+  "C4",           # flake8-comprehensions
+  "PT",           # flake8-pytest-style
+  "Q",            # flake8-quotes
+  "RUF",
+]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_unused_configs = true
+ignore_missing_imports = true
+no_implicit_optional = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra --cov=package_template --cov-report=term-missing"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src", 
+  "README.md", 
+  "LICENSE", 
+  "pyproject.toml",
+  "src/package_template/py.typed"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/package_template"]
+
+# --- VCS-based versioning (hatch-vcs) ---
+[tool.hatch.version]
+source = "vcs"
+
+# Write the resolved version into a module at build time so consumers can import __version__ if desired
+[tool.hatch.build.hooks.vcs]
+version-file = "src/package_template/_version.py"
+
+# Optional: tweak how local (non-tag) versions are rendered. This keeps the commit hash and date
+# See setuptools-scm docs for options: node-and-date (default), node-and-timestamp, no-local-version, etc.
+[tool.hatch.version.raw-options]
+local_scheme = "node-and-date"

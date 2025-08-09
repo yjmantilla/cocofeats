@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Treat docs as documentation for linguist
+docs/* linguist-documentation
