@@ -1,14 +1,11 @@
-# package_template
+# cocofeats
 
-A modern Python package template featuring:
+A slurm friendly MEEG feature extraction package leveraging bids-like data organization and DAG processing.
 
-- Modern `pyproject.toml` (PEP 621) with `hatchling`
-- Source layout under `src/`
-- Testing with `pytest` and coverage
-- Linting with `ruff`, formatting with `black`, typing with `mypy`
-- Sphinx documentation with the `furo` theme, MyST Markdown, and `sphinx-gallery`
-- GitHub Actions CI for lint, type-check, tests, and docs build
-- Pre-commit hooks
+- Bids-like data organization
+- Slurm friendly
+- Reusage of existing derivatives through DAG processing.
+- Yaml configuration
 
 ## Quickstart
 
