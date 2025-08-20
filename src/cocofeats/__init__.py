@@ -1,6 +1,7 @@
 """package_template: A modern Python package template."""
 
 from .example import add
+from loguru import logger
 
 try:
     # provided by hatch-vcs at build / editable install
@@ -10,3 +11,6 @@ except Exception:
     __version__ = "0+unknown"
 
 __all__ = ["__version__", "add"]
+
+# Ensure that the logger is configured
+logger.disable('cocofeats')  # Disable the default logger for this package
