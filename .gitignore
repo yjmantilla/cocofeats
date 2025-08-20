@@ -15,7 +15,7 @@ dist/
 *.egg
 
 docs/sg_execution_times.rst
-src/package_template/_version.py
+src/*/_version.py
 
 # Virtual environments
 .venv/

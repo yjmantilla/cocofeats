@@ -1,4 +1,4 @@
-from package_template import add
+from cocofeats import add
 
 
 def test_add():
