@@ -25,7 +25,16 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Typing :: Typed",
 ]
-dependencies = ["mne","pandas","loguru","pyyaml"]
+
+dependencies = ["mne",
+"pandas",
+"loguru",
+"pyyaml",
+"mne-bids",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [project.urls]
 Homepage = "https://github.com/yjmantilla/cocofeats"
