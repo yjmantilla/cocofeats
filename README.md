@@ -23,7 +23,7 @@ pip install -U pip
 pip install -e .[dev,test,docs]
 
 # Run quality checks
-ruff check . (fix with `ruff check . --fix` if needed)
+ruff check src/ (fix with `ruff check src/ --fix` if needed)
 black --check . (fix with `black .` if needed)
 pytest -q
 

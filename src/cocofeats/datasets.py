@@ -14,6 +14,19 @@ from cocofeats.utils import get_num_digits
 
 
 def replace_brainvision_filename(fpath, newname):
+    """Replace the BrainVision filenames in a .vhdr file.
+
+    Parameters
+    ----------
+    fpath : str
+        The path to the .vhdr file.
+    newname : str
+    The new name to replace in the .vhdr file.
+
+    Returns
+    -------
+    None
+    """
     if ".eeg" in newname:
         newname = newname.replace(".eeg", "")
     if ".vmrk" in newname:
@@ -127,6 +140,22 @@ def make_dummy_dataset(
 
 
 def generate_1_over_f_noise(n_channels, n_times, exponent=1.0, random_state=None):
+    """Generate 1/f noise (pink noise) for MNE Raw data.
+    Parameters
+    ----------
+    n_channels : int
+        Number of channels to generate noise for.
+    n_times : int
+        Number of time points for each channel.
+    exponent : float, optional
+        Exponent for the 1/f noise. Default is 1.0.
+    random_state : int, optional
+        Random seed for reproducibility. Default is None.
+    Returns
+    -------
+    np.ndarray
+        Generated pink noise with shape (n_channels, n_times).
+    """
     rng = np.random.default_rng(random_state)
     noise = np.zeros((n_channels, n_times))
 
@@ -170,6 +199,12 @@ def get_dummy_raw(
         Time duration of the data in seconds.
     NUMEVENTS : int, optional
         Number of events along the duration.
+    Returns
+    -------
+    raw : mne.io.Raw
+        The generated MNE Raw object.
+    new_events : mne.events
+        The generated MNE events.
     """
     # Create some dummy metadata
     n_channels = NCHANNELS
@@ -216,18 +251,10 @@ def save_dummy_vhdr(fpath, dummy_args=None):
         return None
 
 
-DEF_DATASET_PARAMS = {
-    "PATTERN": "T%task%/S%session%/sub%subject%_%acquisition%_%run%",
-    "DATASET": "DUMMY",
-    "NSUBS": 2,
-    "NTASKS": 2,
-    "NRUNS": 1,
-    "NSESSIONS": 1,
-    "NACQS": 1,
-}
 
 
-def generate_dummy_dataset(data_params=DEF_DATASET_PARAMS):
+
+def generate_dummy_dataset(data_params=None):
     """Generates a dummy dataset with the specified pattern type and format.
     Parameters
     ----------
@@ -236,6 +263,17 @@ def generate_dummy_dataset(data_params=DEF_DATASET_PARAMS):
         Follows the arguments of `sovabids.datasets.make_dummy_dataset`.
     """
 
+    if data_params is None:
+        DEF_DATASET_PARAMS = {
+            "PATTERN": "T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+            "DATASET": "DUMMY",
+            "NSUBS": 2,
+            "NTASKS": 2,
+            "NRUNS": 1,
+            "NSESSIONS": 1,
+            "NACQS": 1,
+        }
+        data_params = DEF_DATASET_PARAMS
     # Getting current file path and then going to _data directory
     this_dir = os.path.dirname(__file__)
     data_dir = os.path.join(this_dir, "..", "..", "_data")
