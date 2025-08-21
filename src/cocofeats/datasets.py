@@ -13,11 +13,11 @@ from mne_bids.write import _write_raw_brainvision
 from cocofeats.utils import get_num_digits
 
 
-def replace_brainvision_filename(fpath,newname):
+def replace_brainvision_filename(fpath, newname):
     if ".eeg" in newname:
-        newname = newname.replace(".eeg","")
+        newname = newname.replace(".eeg", "")
     if ".vmrk" in newname:
-        newname = newname.replace(".vmrk","")
+        newname = newname.replace(".vmrk", "")
     for line in fileinput.input(fpath, inplace=True):
         if "DataFile" in line:
             print(f"DataFile={newname}.eeg".format(fileinput.filelineno(), line))
@@ -27,19 +27,20 @@ def replace_brainvision_filename(fpath,newname):
             print(f"{line}", end="")
 
 
-def make_dummy_dataset(EXAMPLE,
+def make_dummy_dataset(
+    EXAMPLE,
     PATTERN="T%task%/S%session%/sub%subject%_%acquisition%_%run%",
-    DATASET = "DUMMY",
-    NSUBS = 2,
-    NSESSIONS = 2,
-    NTASKS = 2,
-    NACQS = 2,
-    NRUNS = 2,
-    PREFIXES = {"subject":"SU","session":"SE","task":"TA","acquisition":"AC","run":"RU"},
+    DATASET="DUMMY",
+    NSUBS=2,
+    NSESSIONS=2,
+    NTASKS=2,
+    NACQS=2,
+    NRUNS=2,
+    PREFIXES=None,
     ROOT=None,
 ):
     """Create a dummy dataset given some parameters.
-    
+
     Parameters
     ----------
     EXAMPLE : str,PathLike|list , required
@@ -69,53 +70,60 @@ def make_dummy_dataset(EXAMPLE,
 
     """
 
+    if PREFIXES is None:
+        PREFIXES = {
+            "subject": "SU",
+            "session": "SE",
+            "task": "TA",
+            "acquisition": "AC",
+            "run": "RU",
+        }
     if ROOT is None:
         this_dir = os.path.dirname(__file__)
-        data_dir = os.path.abspath(os.path.join(this_dir,"..","_data"))
+        data_dir = os.path.abspath(os.path.join(this_dir, "..", "_data"))
     else:
         data_dir = ROOT
-    os.makedirs(data_dir,exist_ok=True)
+    os.makedirs(data_dir, exist_ok=True)
 
     sub_zeros = get_num_digits(NSUBS)
-    subs = [ PREFIXES["subject"]+ str(x).zfill(sub_zeros) for x in range(NSUBS)]
+    subs = [PREFIXES["subject"] + str(x).zfill(sub_zeros) for x in range(NSUBS)]
 
     task_zeros = get_num_digits(NTASKS)
-    tasks = [ PREFIXES["task"]+str(x).zfill(task_zeros) for x in range(NTASKS)]
+    tasks = [PREFIXES["task"] + str(x).zfill(task_zeros) for x in range(NTASKS)]
 
     run_zeros = get_num_digits(NRUNS)
     runs = [str(x).zfill(run_zeros) for x in range(NRUNS)]
 
     ses_zeros = get_num_digits(NSESSIONS)
-    sessions = [ PREFIXES["session"]+str(x).zfill(ses_zeros) for x in range(NSESSIONS)]
+    sessions = [PREFIXES["session"] + str(x).zfill(ses_zeros) for x in range(NSESSIONS)]
 
     acq_zeros = get_num_digits(NACQS)
-    acquisitions = [ PREFIXES["acquisition"]+str(x).zfill(acq_zeros) for x in range(NACQS)]
-
+    acquisitions = [PREFIXES["acquisition"] + str(x).zfill(acq_zeros) for x in range(NACQS)]
 
     for task in tasks:
         for session in sessions:
             for run in runs:
                 for sub in subs:
                     for acq in acquisitions:
-                        dummy = PATTERN.replace("%dataset%",DATASET)
-                        dummy = dummy.replace("%task%",task)
-                        dummy = dummy.replace("%session%",session)
-                        dummy = dummy.replace("%subject%",sub)
-                        dummy = dummy.replace("%run%",run)
-                        dummy = dummy.replace("%acquisition%",acq)
-                        path = [data_dir] +dummy.split("/")
+                        dummy = PATTERN.replace("%dataset%", DATASET)
+                        dummy = dummy.replace("%task%", task)
+                        dummy = dummy.replace("%session%", session)
+                        dummy = dummy.replace("%subject%", sub)
+                        dummy = dummy.replace("%run%", run)
+                        dummy = dummy.replace("%acquisition%", acq)
+                        path = [data_dir, *dummy.split("/")]
                         fpath = os.path.join(*path)
                         dirpath = os.path.join(*path[:-1])
-                        os.makedirs(dirpath,exist_ok=True)
-                        if isinstance(EXAMPLE,list):
+                        os.makedirs(dirpath, exist_ok=True)
+                        if isinstance(EXAMPLE, list):
                             for ff in EXAMPLE:
                                 fname, ext = os.path.splitext(ff)
-                                shutil.copyfile(ff, fpath+ext)
+                                shutil.copyfile(ff, fpath + ext)
                                 if "vmrk" in ext or "vhdr" in ext:
-                                    replace_brainvision_filename(fpath+ext,path[-1])
+                                    replace_brainvision_filename(fpath + ext, path[-1])
                         else:
                             fname, ext = os.path.splitext(EXAMPLE)
-                            shutil.copyfile(EXAMPLE, fpath+ext)
+                            shutil.copyfile(EXAMPLE, fpath + ext)
 
 
 def generate_1_over_f_noise(n_channels, n_times, exponent=1.0, random_state=None):
@@ -142,10 +150,12 @@ def generate_1_over_f_noise(n_channels, n_times, exponent=1.0, random_state=None
 
     return noise
 
-def get_dummy_raw(NCHANNELS = 5,
-    SFREQ = 200,
-    STOP = 10,
-    NUMEVENTS = 10,
+
+def get_dummy_raw(
+    NCHANNELS=5,
+    SFREQ=200,
+    STOP=10,
+    NUMEVENTS=10,
 ):
     """
     Create a dummy MNE Raw file given some parameters.
@@ -166,18 +176,18 @@ def get_dummy_raw(NCHANNELS = 5,
     sampling_freq = SFREQ  # in Hertz
     info = mne.create_info(n_channels, sfreq=sampling_freq)
 
-    times = np.linspace(0, STOP, STOP*sampling_freq, endpoint=False)
+    times = np.linspace(0, STOP, STOP * sampling_freq, endpoint=False)
     data = generate_1_over_f_noise(NCHANNELS, times.shape[0], exponent=1.0)
-    #np.zeros((NCHANNELS,times.shape[0]))
+    # np.zeros((NCHANNELS,times.shape[0]))
 
     raw = mne.io.RawArray(data, info)
     raw.set_channel_types(dict.fromkeys(raw.ch_names, "eeg"))
-    new_events = mne.make_fixed_length_events(raw, duration=STOP//NUMEVENTS)
+    new_events = mne.make_fixed_length_events(raw, duration=STOP // NUMEVENTS)
 
-    return raw,new_events
+    return raw, new_events
 
-def save_dummy_vhdr(fpath,dummy_args={}
-):
+
+def save_dummy_vhdr(fpath, dummy_args=None):
     """
     Save a dummy vhdr file.
 
@@ -193,28 +203,31 @@ def save_dummy_vhdr(fpath,dummy_args={}
     List with the Paths of the desired vhdr file, if those were succesfully created,
     None otherwise.
     """
+    if dummy_args is None:
+        dummy_args = {}
 
-    raw,new_events = get_dummy_raw(**dummy_args)
-    _write_raw_brainvision(raw,fpath,new_events,overwrite=True)
-    eegpath =fpath.replace(".vhdr",".eeg")
-    vmrkpath = fpath.replace(".vhdr",".vmrk")
-    if all(os.path.isfile(x) for x in [fpath,eegpath,vmrkpath]):
-        return [fpath,eegpath,vmrkpath]
+    raw, new_events = get_dummy_raw(**dummy_args)
+    _write_raw_brainvision(raw, fpath, new_events, overwrite=True)
+    eegpath = fpath.replace(".vhdr", ".eeg")
+    vmrkpath = fpath.replace(".vhdr", ".vmrk")
+    if all(os.path.isfile(x) for x in [fpath, eegpath, vmrkpath]):
+        return [fpath, eegpath, vmrkpath]
     else:
         return None
 
 
-
-DEF_DATASET_PARAMS ={"PATTERN":"T%task%/S%session%/sub%subject%_%acquisition%_%run%",
-"DATASET" : "DUMMY",
-"NSUBS" : 2,
-"NTASKS" : 2,
-"NRUNS" : 1,
-"NSESSIONS" : 1,
-"NACQS" : 1,
+DEF_DATASET_PARAMS = {
+    "PATTERN": "T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    "DATASET": "DUMMY",
+    "NSUBS": 2,
+    "NTASKS": 2,
+    "NRUNS": 1,
+    "NSESSIONS": 1,
+    "NACQS": 1,
 }
 
-def generate_dummy_dataset(data_params = DEF_DATASET_PARAMS):
+
+def generate_dummy_dataset(data_params=DEF_DATASET_PARAMS):
     """Generates a dummy dataset with the specified pattern type and format.
     Parameters
     ----------
@@ -223,36 +236,31 @@ def generate_dummy_dataset(data_params = DEF_DATASET_PARAMS):
         Follows the arguments of `sovabids.datasets.make_dummy_dataset`.
     """
 
-
     # Getting current file path and then going to _data directory
     this_dir = os.path.dirname(__file__)
-    data_dir = os.path.join(this_dir,"..","..","_data")
+    data_dir = os.path.join(this_dir, "..", "..", "_data")
     data_dir = os.path.abspath(data_dir)
 
     # Defining relevant conversion paths
-    dataset_name = data_params.get("DATASET","DUMMY")
-    test_root = os.path.join(data_dir,dataset_name)
-    input_root = os.path.join(test_root,dataset_name+"_SOURCE")
-    bids_path = os.path.join(test_root,dataset_name+"_BIDS")
+    dataset_name = data_params.get("DATASET", "DUMMY")
+    test_root = os.path.join(data_dir, dataset_name)
+    input_root = os.path.join(test_root, dataset_name + "_SOURCE")
+    bids_path = os.path.join(test_root, dataset_name + "_BIDS")
 
     # Make example File
-    example_fpath = save_dummy_vhdr(os.path.join(data_dir,"dummy.vhdr"))
+    example_fpath = save_dummy_vhdr(os.path.join(data_dir, "dummy.vhdr"))
 
     # PARAMS for making the dummy dataset
-    DATA_PARAMS ={ "EXAMPLE":example_fpath,
-        "ROOT" : input_root
-    }
+    DATA_PARAMS = {"EXAMPLE": example_fpath, "ROOT": input_root}
     DATA_PARAMS.update(data_params)
 
     # Preparing directories
-    dirs = [input_root,bids_path] #dont include test_root for saving multiple conversions
+    dirs = [input_root, bids_path]
     for dir in dirs:
-        try:
+        if os.path.isdir(dir):
             shutil.rmtree(dir)
-        except:
-            pass
 
-    [os.makedirs(dir,exist_ok=True) for dir in dirs]
+    [os.makedirs(dir, exist_ok=True) for dir in dirs]
 
     # Generating the dummy dataset
     make_dummy_dataset(**DATA_PARAMS)
