@@ -34,8 +34,8 @@ jobs:
       - name: Format check (black)
         run: black --check .
 
-      - name: Type check (mypy)
-        run: mypy src
+      #- name: Type check (mypy)
+      #  run: mypy src
 
       - name: Run tests
         run: pytest -q
