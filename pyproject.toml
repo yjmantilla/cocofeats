@@ -31,6 +31,7 @@ dependencies = ["mne",
 "loguru",
 "pyyaml",
 "mne-bids",
+"pybv >= 0.7.3"
 ]
 
 [tool.hatch.metadata]
