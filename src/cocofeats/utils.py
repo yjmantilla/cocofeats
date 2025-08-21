@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def get_num_digits(N):
     """Return the number of digits of the given number N.
     

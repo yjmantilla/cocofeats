@@ -1,9 +1,11 @@
 
-from mne.io import read_raw
-from mne import read_epochs
-from loguru import logger
-import yaml
 from copy import deepcopy
+
+import yaml
+from loguru import logger
+from mne import read_epochs
+from mne.io import read_raw
+
 
 def load_mne_meeg(meeg_file, kwargs={}):
     """Load a MEEG file using MNE-Python.
@@ -24,14 +26,14 @@ def load_mne_meeg(meeg_file, kwargs={}):
     """
     try:
         meeg = read_raw(meeg_file, **kwargs)
-    except Exception as e:
+    except Exception:
         # try to load as epochs
         try:
             meeg = read_epochs(meeg_file, **kwargs)
         except Exception as e:
             logger.error(f"Failed to load MEEG file {meeg_file} as Raw or Epochs. Error: {e}")
             raise ValueError(f"Could not load MEEG file {meeg_file}. Error: {e}")
-    return meeg 
+    return meeg
 
 
 def load_yaml(rules):
@@ -52,9 +54,9 @@ def load_yaml(rules):
                 return yaml.load(f,yaml.FullLoader)
         except:
             logger.error(f"Could not read {rules} file as a rule file.")
-            raise IOError(f"Couldnt read {rules} file as a rule file.")
+            raise OSError(f"Couldnt read {rules} file as a rule file.")
     elif isinstance(rules,dict):
         return deepcopy(rules)
     else:
         logger.error(f"Expected str or dict as rules, got {type(rules)} instead.")
-        raise ValueError(f'Expected str or dict as rules, got {type(rules)} instead.')
+        raise ValueError(f"Expected str or dict as rules, got {type(rules)} instead.")

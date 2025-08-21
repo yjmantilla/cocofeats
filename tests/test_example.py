@@ -10,7 +10,7 @@ if __name__ == "__main__":
     # Generate a dummy dataset for testing
     generate_dummy_dataset()
     print("Dummy dataset generated successfully.")
-    
+
     # Run the test
     test_add()
     print("All tests passed.")
