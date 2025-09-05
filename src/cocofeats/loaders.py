@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import IO, Any
 
 import yaml
-from loggers import get_logger
+
+from cocofeats.loggers import get_logger
 
 log = get_logger(__name__)
 
