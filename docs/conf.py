@@ -5,11 +5,11 @@ from datetime import datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _v
 
-project = "package_template"
+project = "cocofeats"
 
 # Full version from installed dist (hatch-vcs stamps this)
 try:
-    release = _v("package_template")  # matches [project].name in pyproject
+    release = _v("cocofeats")  # matches [project].name in pyproject
 except PackageNotFoundError:
     release = "0+unknown"
 
@@ -39,7 +39,7 @@ html_title = f"{project} {release}" + (f" ({_commit})" if _commit else "")
 # Add src to sys.path for autodoc
 sys.path.insert(0, os.path.abspath("../src"))
 
-project = "package_template"
+project = "cocofeats"
 author = "Your Name"
 current_year = datetime.now().year
 copyright = f"{current_year}, {author}"

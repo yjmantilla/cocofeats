@@ -1,7 +1,7 @@
 API Reference
 =============
 
-.. automodule:: package_template
+.. automodule:: cocofeats
    :members:
    :undoc-members:
    :show-inheritance:

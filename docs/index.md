@@ -2,7 +2,7 @@
 html_theme_sidebar_secondary: false
 ---
 
-# package_template
+# cocofeats
 
 A modern Python package template.
 

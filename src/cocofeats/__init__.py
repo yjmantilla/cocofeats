@@ -1,4 +1,4 @@
-"""package_template: A modern Python package template."""
+"""cocofeats: A modern Python package template."""
 
 from loguru import logger
 

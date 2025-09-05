@@ -1,7 +1,7 @@
 # Usage
 
 ```python
-from package_template import add
+from cocofeats import add
 
 print(add(2, 3))  # 5
 ```

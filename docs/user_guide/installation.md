@@ -1,14 +1,14 @@
 # Installation
 
 ```bash
-pip install package_template
+pip install cocofeats
 ```
 
 For development:
 
 ```bash
-git clone https://github.com/your-org/package_template
-cd package_template
+git clone https://github.com/your-org/cocofeats
+cd cocofeats
 python -m venv .venv
 .venv\\Scripts\\activate  # Windows
 # source .venv/bin/activate  # macOS/Linux

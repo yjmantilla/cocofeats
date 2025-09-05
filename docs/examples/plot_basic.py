@@ -2,10 +2,10 @@
 Basic example
 ================
 
-This example demonstrates using the :func:`package_template.add` function.
+This example demonstrates using the :func:`cocofeats.add` function.
 """
 
-from package_template import add
+from cocofeats import add
 
 result = add(2, 3)
 print(f"2 + 3 = {result}")
