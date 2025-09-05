@@ -29,10 +29,10 @@ jobs:
           pip install -e .[dev,test,docs]
 
       - name: Lint (ruff)
-        run: ruff check .
+        run: ruff check src/
 
       - name: Format check (black)
-        run: black --check .
+        run: black --check src/
 
       #- name: Type check (mypy)
       #  run: mypy src
