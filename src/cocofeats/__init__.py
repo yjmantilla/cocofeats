@@ -1,7 +1,5 @@
 """cocofeats: A modern Python package template."""
 
-from loguru import logger
-
 from .example import add
 
 try:
@@ -12,6 +10,3 @@ except Exception:
     __version__ = "0+unknown"
 
 __all__ = ["__version__", "add"]
-
-# Ensure that the logger is configured
-logger.disable("cocofeats")  # Disable the default logger for this package
