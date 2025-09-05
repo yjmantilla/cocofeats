@@ -11,7 +11,6 @@ A slurm friendly MEEG feature extraction package leveraging bids-like data organ
 
 ```bash
 # Clone and rename the repository
-# Replace 'package_template' everywhere (folder/package names and pyproject)
 
 # Create and activate a virtual environment
 python -m venv .venv
