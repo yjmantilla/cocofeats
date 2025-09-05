@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
+from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Mapping, Union, IO, Optional
-import os
-import yaml
+from typing import IO, Any
 
+import yaml
 from loggers import get_logger
 
 log = get_logger(__name__)
@@ -22,6 +23,7 @@ class UniqueKeySafeLoader(_BaseSafeLoader):
     Safe YAML loader that raises on duplicate keys within the same mapping.
     Logs the exact location (line/column).
     """
+
     def construct_mapping(self, node, deep: bool = False):  # type: ignore[override]
         if not isinstance(node, yaml.MappingNode):
             raise yaml.constructor.ConstructorError(
@@ -47,8 +49,8 @@ class UniqueKeySafeLoader(_BaseSafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
-Pathish = Union[str, os.PathLike[str]]
-RulesLike = Union[Mapping[str, Any], Pathish, IO[str]]
+Pathish = str | os.PathLike[str]
+RulesLike = Mapping[str, Any] | Pathish | IO[str]
 
 
 def load_yaml(rules: RulesLike) -> dict[str, Any]:
@@ -78,7 +80,7 @@ def load_yaml(rules: RulesLike) -> dict[str, Any]:
 
     # Open file if given a path; otherwise assume text file-like.
     close_after = False
-    if isinstance(rules, (str, os.PathLike)):
+    if isinstance(rules, str | os.PathLike):
         path = Path(rules)
         local_log = get_logger(__name__, path=str(path))
         local_log.debug("Opening YAML file")
@@ -87,7 +89,7 @@ def load_yaml(rules: RulesLike) -> dict[str, Any]:
             close_after = True
         except OSError as e:
             local_log.exception("Failed to open YAML file")
-            raise IOError(f"Couldn't read rules file: {path}") from e
+            raise OSError(f"Couldn't read rules file: {path}") from e
         active_log = local_log
     else:
         f = rules  # type: ignore[assignment]
@@ -96,7 +98,7 @@ def load_yaml(rules: RulesLike) -> dict[str, Any]:
 
     try:
         try:
-            data: Optional[Any] = yaml.load(f, Loader=UniqueKeySafeLoader)
+            data: Any | None = yaml.load(f, Loader=UniqueKeySafeLoader)
             active_log.debug("YAML parsed successfully")
         except yaml.YAMLError as e:
             active_log.exception("Invalid YAML encountered during parsing")
@@ -108,9 +110,7 @@ def load_yaml(rules: RulesLike) -> dict[str, Any]:
 
         if not isinstance(data, dict):
             active_log.error("YAML root is not a mapping/dict", root_type=type(data).__name__)
-            raise TypeError(
-                f"YAML root must be a mapping/dict, got {type(data).__name__}"
-            )
+            raise TypeError(f"YAML root must be a mapping/dict, got {type(data).__name__}")
 
         active_log.debug("YAML root is a mapping", top_level_keys=len(data))
         return data

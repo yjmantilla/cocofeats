@@ -4,9 +4,11 @@ from __future__ import annotations
 import logging
 import os
 import sys
+
 import structlog
 
 _CONFIGURED = False
+
 
 def _coerce_level(level: str | int) -> int:
     if isinstance(level, int):
@@ -16,6 +18,7 @@ def _coerce_level(level: str | int) -> int:
     if isinstance(lvl, int):
         return lvl
     raise ValueError(f"Unknown log level: {level!r}")
+
 
 def configure_logging(*, json: bool | None = None, level: str | int | None = None) -> None:
     """
@@ -56,20 +59,20 @@ def configure_logging(*, json: bool | None = None, level: str | int | None = Non
 
     # ---- structlog processors ----
     processors = [
-        structlog.contextvars.merge_contextvars,            # include contextvars if used
-        structlog.stdlib.filter_by_level,                   # drop events below level early
-        structlog.processors.add_log_level,                 # add 'level' field (keep this one)
+        structlog.contextvars.merge_contextvars,  # include contextvars if used
+        structlog.stdlib.filter_by_level,  # drop events below level early
+        structlog.processors.add_log_level,  # add 'level' field (keep this one)
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,               # clean tracebacks
-        structlog.stdlib.add_logger_name,                   # logger name field
+        structlog.processors.format_exc_info,  # clean tracebacks
+        structlog.stdlib.add_logger_name,  # logger name field
         structlog.stdlib.PositionalArgumentsFormatter(),
     ]
 
     render = structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
 
     structlog.configure(
-        processors=processors + [render],
+        processors=[*processors, render],
         wrapper_class=structlog.make_filtering_bound_logger(level),  # filter in structlog too
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
@@ -87,7 +90,7 @@ def get_logger(name: str | None = None, **bind):
 
 
 # --- Optional: unify stdlib logs through structlog rendering (advanced) ---
-# If you want *all* stdlib logs (from libraries) to go through structlog’s renderer,
+# If you want *all* stdlib logs (from libraries) to go through structlog's renderer,
 # replace the handler formatter above with a ProcessorFormatter and add these lines:
 #
 # from structlog.stdlib import ProcessorFormatter

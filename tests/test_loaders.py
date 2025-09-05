@@ -84,9 +84,7 @@ def test_duplicate_keys_raise_valueerror(tmp_path: Path):
 def test_duplicate_keys_nested_raise_valueerror(tmp_path: Path):
     p = tmp_path / "dup_nested.yml"
     p.write_text(
-        "outer:\n"
-        "  x: 1\n"
-        "  x: 2\n",
+        "outer:\n" "  x: 1\n" "  x: 2\n",
         encoding="utf-8",
     )
     with pytest.raises(ValueError) as excinfo:
