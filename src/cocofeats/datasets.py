@@ -252,12 +252,21 @@ def save_dummy_vhdr(fpath, dummy_args=None):
 
 
 def generate_dummy_dataset(data_params=None):
-    """Generates a dummy dataset with the specified pattern type and format.
+    """
+    Generate a dummy dataset.
+
     Parameters
     ----------
-    data_params : dict
-        Parameters for dataset generation, such as number of subjects, tasks, etc.
-        Follows the arguments of `sovabids.datasets.make_dummy_dataset`.
+    data_params : dict, optional
+        Parameters for dataset generation (e.g., number of subjects, sessions, tasks,
+        acquisitions, runs, prefixes, and root). See
+        :func:`sovabids.datasets.make_dummy_dataset` for the full argument set.
+
+    Returns
+    -------
+    Any
+        Implementation-specific return value (e.g., list of created paths), or ``None``
+        if nothing was created.
     """
 
     if data_params is None:
