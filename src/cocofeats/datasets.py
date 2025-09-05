@@ -251,9 +251,6 @@ def save_dummy_vhdr(fpath, dummy_args=None):
         return None
 
 
-
-
-
 def generate_dummy_dataset(data_params=None):
     """Generates a dummy dataset with the specified pattern type and format.
     Parameters
