@@ -34,6 +34,7 @@ sphinx-build -b html docs docs/_build/html -W --keep-going
 
 - Local build: `docs/_build/html/index.html`
 - Hosted docs: configure GitHub Pages and set the URL in `pyproject.toml` under `[project.urls]`.
+- [Docs](https://yjmantilla.github.io/cocofeats/)
 
 ## Contributing
 
