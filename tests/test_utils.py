@@ -1,5 +1,4 @@
 # tests/test_get_num_digits.py
-import math
 import pytest
 
 from cocofeats.utils import get_num_digits
@@ -40,7 +39,7 @@ def test_zero_in_fast_mode():
 
 
 def test_large_number_consistency():
-    n = 10**50  # 51 digits
+    n = 10 ** 50  # 51 digits
     safe = get_num_digits(n, method="safe")
     fast = get_num_digits(n, method="fast")
     # Both should agree
