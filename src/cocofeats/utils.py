@@ -1,17 +1,44 @@
-import numpy as np
+import math
+from typing import Literal
 
 
-def get_num_digits(N):
-    """Return the number of digits of the given number N.
+def get_num_digits(n: int, method: Literal["safe", "fast"] = "safe") -> int:
+    """Return the number of decimal digits in an integer.
 
     Parameters
     ----------
-    N : int
-        The number we want to apply the function to.
+    n : int
+        The integer whose digits should be counted.
+    method : {"safe", "fast"}, default="safe"
+        - "safe": Uses string conversion (`len(str(abs(n)))`).
+          Always correct, even for very large integers.
+        - "fast": Uses ``log10``.
+          Faster for large numbers, but depends on floating-point precision.
+          Still safe for most practical integer ranges.
 
     Returns
     -------
-    int :
-        The numbers of digits needed to represent the number N.
+    int
+        The number of digits in the absolute value of ``n``.
+
+    Examples
+    --------
+    >>> get_num_digits(0)
+    1
+    >>> get_num_digits(12345)
+    5
+    >>> get_num_digits(-999, method="fast")
+    3
     """
-    return int(np.log10(N)) + 1
+    if n == 0:
+        return 1
+
+    n_abs = abs(n)
+
+    if method == "safe":
+        return len(str(n_abs))
+
+    if method == "fast":
+        return int(math.log10(n_abs)) + 1
+
+    raise ValueError(f"Unknown method: {method!r}. Use 'safe' or 'fast'.")
