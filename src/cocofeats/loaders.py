@@ -1,65 +1,121 @@
+from __future__ import annotations
+
 from copy import deepcopy
-
+from pathlib import Path
+from typing import Any, Mapping, Union, IO, Optional
+import os
 import yaml
-from loguru import logger
-from mne import read_epochs
-from mne.io import read_raw
+
+from loggers import get_logger
+
+log = get_logger(__name__)
+
+# Prefer C-accelerated safe loader if available.
+try:
+    _BaseSafeLoader = yaml.CSafeLoader  # type: ignore[attr-defined]
+except AttributeError:
+    _BaseSafeLoader = yaml.SafeLoader
 
 
-def load_mne_meeg(meeg_file, kwargs=None):
-    """Load a MEEG file using MNE-Python.
-    Parameters
-    ----------
-    meeg_file : str
-        The path to the MEEG file.
-    kwargs : dict, optional
-        Additional keyword arguments to pass to the MNE loading functions.
-    Returns
-    -------
-    meeg : mne.io.Raw | mne.BaseEpochs
-        The loaded MEEG data, either as a Raw object or Epochs object.
-    Raises
-    ------
-    ValueError
-        If the MEEG file cannot be loaded as either Raw or Epochs.
+class UniqueKeySafeLoader(_BaseSafeLoader):
     """
-    if kwargs is None:
-        kwargs = {}
-    try:
-        meeg = read_raw(meeg_file, **kwargs)
-    except Exception:
-        # try to load as epochs
-        try:
-            meeg = read_epochs(meeg_file, **kwargs)
-        except Exception as e:
-            # include traceback in logs
-            logger.exception(f"Failed to load MEEG file {meeg_file} as Raw or Epochs")
-            # raise a clearer error while preserving the original cause
-            raise ValueError(f"Could not load MEEG file {meeg_file}") from e
-    return meeg
-
-
-def load_yaml(rules):
-    """Load rules if given a path, bypass if given a dict.
-    Parameters
-    ----------
-
-    rules : str|dict
-        The path to the rules file, or the rules dictionary.
-    Returns
-    -------
-    dict
-        The rules dictionary.
+    Safe YAML loader that raises on duplicate keys within the same mapping.
+    Logs the exact location (line/column).
     """
-    if isinstance(rules, str):
-        try:
-            with open(rules, encoding="utf-8") as f:
-                return yaml.load(f, yaml.FullLoader)
-        except Exception as e:
-            logger.error(f"Could not read {rules} file as a rule file.")
-            raise OSError(f"Couldnt read {rules} file as a rule file.") from e
-    elif isinstance(rules, dict):
+    def construct_mapping(self, node, deep: bool = False):  # type: ignore[override]
+        if not isinstance(node, yaml.MappingNode):
+            raise yaml.constructor.ConstructorError(
+                None, None, f"Expected a mapping node, got {node.id}", node.start_mark
+            )
+
+        seen: set[Any] = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in seen:
+                mark = key_node.start_mark
+                log.error(
+                    "Duplicate YAML key encountered",
+                    key=key,
+                    line=mark.line + 1,
+                    column=mark.column + 1,
+                )
+                raise ValueError(
+                    f"Duplicate key '{key}' at line {mark.line + 1}, column {mark.column + 1}"
+                )
+            seen.add(key)
+
+        return super().construct_mapping(node, deep=deep)
+
+
+Pathish = Union[str, os.PathLike[str]]
+RulesLike = Union[Mapping[str, Any], Pathish, IO[str]]
+
+
+def load_yaml(rules: RulesLike) -> dict[str, Any]:
+    """
+    Load a rules dictionary from:
+      • a mapping (returned deep-copied),
+      • a path (str/PathLike), or
+      • a text file-like object.
+
+    Features:
+      - Safe loader (no object construction).
+      - Raises on duplicate keys (with line/column) and logs them.
+      - Ensures the document root is a mapping/dict.
+      - Handles empty files (returns {}).
+
+    Raises:
+      IOError   : File cannot be read.
+      ValueError: Invalid YAML or duplicate keys.
+      TypeError : YAML root is not a mapping/dict.
+    """
+    log.debug("Loading YAML rules", arg_type=type(rules).__name__)
+
+    # If a mapping was provided, return a defensive copy.
+    if isinstance(rules, Mapping):
+        log.debug("Loading YAML from in-memory mapping", action="deepcopy", keys=len(rules))
         return deepcopy(rules)
+
+    # Open file if given a path; otherwise assume text file-like.
+    close_after = False
+    if isinstance(rules, (str, os.PathLike)):
+        path = Path(rules)
+        local_log = get_logger(__name__, path=str(path))
+        local_log.debug("Opening YAML file")
+        try:
+            f = path.open("r", encoding="utf-8")
+            close_after = True
+        except OSError as e:
+            local_log.exception("Failed to open YAML file")
+            raise IOError(f"Couldn't read rules file: {path}") from e
+        active_log = local_log
     else:
-        logger.error(f"Expected str or dict as rules, got {type(rules)} instead.")
-        raise ValueError(f"Expected str or dict as rules, got {type(rules)} instead.")
+        f = rules  # type: ignore[assignment]
+        active_log = log
+        active_log.debug("Using provided file-like object")
+
+    try:
+        try:
+            data: Optional[Any] = yaml.load(f, Loader=UniqueKeySafeLoader)
+            active_log.debug("YAML parsed successfully")
+        except yaml.YAMLError as e:
+            active_log.exception("Invalid YAML encountered during parsing")
+            raise ValueError(f"Invalid YAML: {e}") from e
+
+        if data is None:
+            active_log.warning("YAML document is empty; returning an empty dictionary")
+            return {}
+
+        if not isinstance(data, dict):
+            active_log.error("YAML root is not a mapping/dict", root_type=type(data).__name__)
+            raise TypeError(
+                f"YAML root must be a mapping/dict, got {type(data).__name__}"
+            )
+
+        active_log.debug("YAML root is a mapping", top_level_keys=len(data))
+        return data
+
+    finally:
+        if close_after:
+            f.close()
+            active_log.debug("Closed YAML file handle")
