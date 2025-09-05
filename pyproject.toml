@@ -64,6 +64,7 @@ docs = [
   "sphinx-autodoc-typehints>=2.1",
   "sphinx-gallery>=0.16",
   "matplotlib>=3.7",
+  "sphinx-autoapi",
 ]
 
 [tool.black]
