@@ -28,10 +28,10 @@ classifiers = [
 
 dependencies = ["mne",
 "pandas",
-"loguru",
+"structlog",
 "pyyaml",
 "mne-bids",
-"pybv >= 0.7.3"
+"pybv >= 0.7.3",
 ]
 
 [tool.hatch.metadata]
