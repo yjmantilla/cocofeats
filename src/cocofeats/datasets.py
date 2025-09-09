@@ -388,43 +388,100 @@ def generate_1_over_f_noise(
 
 
 def get_dummy_raw(
-    NCHANNELS=5,
-    SFREQ=200,
-    STOP=10,
-    NUMEVENTS=10,
-):
+    NCHANNELS: int = 5,
+    SFREQ: float = 200.0,
+    STOP: float = 10.0,
+    NUMEVENTS: int = 10,
+    *,
+    exponent: float = 1.0,
+    random_state: int | np.random.Generator | None = None,
+    event_id: int = 1,
+) -> tuple[mne.io.Raw, np.ndarray]:
     """
-    Create a dummy MNE Raw file given some parameters.
+    Create a dummy MNE Raw object and an events array.
+
+    The signals are 1/f^alpha (pink-like) noise per channel, z-scored independently.
+    Events are placed evenly across the duration (exactly ``NUMEVENTS`` events),
+    starting at time 0 and never including the last sample.
 
     Parameters
     ----------
     NCHANNELS : int, optional
-        Number of channels.
+        Number of channels. Default is 5.
     SFREQ : float, optional
-        Sampling frequency of the data.
+        Sampling frequency in Hz. Must be positive. Default is 200.0.
     STOP : float, optional
-        Time duration of the data in seconds.
+        Duration of the signal in seconds. Must be positive. Default is 10.0.
     NUMEVENTS : int, optional
-        Number of events along the duration.
+        Number of events to generate. Must be >= 1. Default is 10.
+    exponent : float, optional
+        Spectral exponent ``alpha`` for the 1/f^alpha noise. Default is 1.0.
+    random_state : int | numpy.random.Generator, optional
+        Seed or Generator for reproducibility of the noise. Default is None.
+    event_id : int, optional
+        Event code to assign to all events (column 3 of the events array). Default is 1.
+
     Returns
     -------
     raw : mne.io.Raw
-        The generated MNE Raw object.
-    new_events : mne.events
-        The generated MNE events.
+        The generated MNE Raw object with shape ``(NCHANNELS, n_times)``.
+    new_events : ndarray of shape (NUMEVENTS, 3)
+        The MNE-style events array: columns are (sample_index, 0, event_id).
+
+    Notes
+    -----
+    - The number of samples is computed as ``n_times = int(round(SFREQ * STOP))``.
+    - Events are placed at equally spaced sample indices from 0 to ``n_times-1``
+      (``endpoint=False``), ensuring exactly ``NUMEVENTS`` events.
+
+    Examples
+    --------
+    >>> raw, events = get_dummy_raw(NCHANNELS=3, SFREQ=250.0, STOP=5.0, NUMEVENTS=5, random_state=0)
+    >>> raw.info['sfreq']
+    250.0
+    >>> events.shape
+    (5, 3)
     """
-    # Create some dummy metadata
-    n_channels = NCHANNELS
-    sampling_freq = SFREQ  # in Hertz
-    info = mne.create_info(n_channels, sfreq=sampling_freq)
+    # ---- Validation ----
+    if NCHANNELS <= 0:
+        raise ValueError("NCHANNELS must be a positive integer.")
+    if SFREQ <= 0:
+        raise ValueError("SFREQ must be a positive number (Hz).")
+    if STOP <= 0:
+        raise ValueError("STOP must be a positive number (seconds).")
+    if NUMEVENTS < 1:
+        raise ValueError("NUMEVENTS must be >= 1.")
 
-    times = np.linspace(0, STOP, STOP * sampling_freq, endpoint=False)
-    data = generate_1_over_f_noise(NCHANNELS, times.shape[0], exponent=1.0)
-    # np.zeros((NCHANNELS,times.shape[0]))
+    # ---- Samples / time axis ----
+    n_times = round(SFREQ * STOP)
+    if n_times < NUMEVENTS:
+        # Ensure we can place the requested number of events
+        raise ValueError(
+            f"Requested NUMEVENTS={NUMEVENTS} exceeds number of samples n_times={n_times}."
+        )
 
+    # ---- Channel names and info ----
+    ch_names = [f"EEG{idx:03d}" for idx in range(NCHANNELS)]
+    info = mne.create_info(ch_names=ch_names, sfreq=float(SFREQ), ch_types="eeg")
+
+    # ---- Data (1/f^alpha noise, per channel) ----
+    data = generate_1_over_f_noise(
+        n_channels=NCHANNELS,
+        n_times=n_times,
+        exponent=exponent,
+        sfreq=float(SFREQ),
+        random_state=random_state,
+    )
+
+    # ---- Raw object ----
     raw = mne.io.RawArray(data, info)
-    raw.set_channel_types(dict.fromkeys(raw.ch_names, "eeg"))
-    new_events = mne.make_fixed_length_events(raw, duration=STOP // NUMEVENTS)
+
+    # ---- Events (exactly NUMEVENTS, evenly spaced) ----
+    # Place events at equally spaced samples in [0, n_times) without including n_times
+    event_samples = np.linspace(0, n_times, NUMEVENTS, endpoint=False, dtype=int)
+    new_events = np.column_stack(
+        [event_samples, np.zeros(NUMEVENTS, dtype=int), np.full(NUMEVENTS, event_id, dtype=int)]
+    )
 
     return raw, new_events
 

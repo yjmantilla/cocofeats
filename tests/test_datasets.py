@@ -3,10 +3,13 @@ import os
 import numpy as np
 from pathlib import Path
 import pytest
+import mne
+
 from cocofeats.datasets import (
     replace_brainvision_filename,
     make_dummy_dataset,
     generate_1_over_f_noise,
+    get_dummy_raw,
 )
 
 
@@ -446,3 +449,111 @@ def test_slope_consistency_across_sfreq():
 def test_invalid_sizes_raise(nc, nt):
     with pytest.raises(ValueError):
         _ = generate_1_over_f_noise(nc, nt, exponent=1.0, random_state=0)
+
+
+# Tests for get_dummy_raw function
+
+
+def test_basic_shape_and_info():
+    n_ch, sfreq, stop, n_events = 4, 200.0, 2.5, 10  # n_times = round(200*2.5)=500
+    raw, events = get_dummy_raw(
+        NCHANNELS=n_ch, SFREQ=sfreq, STOP=stop, NUMEVENTS=n_events, random_state=0
+    )
+
+    assert isinstance(raw, mne.io.BaseRaw)
+    assert raw.info["sfreq"] == sfreq
+    assert raw.get_data().shape == (n_ch, 500)
+
+    # channel names and types
+    assert raw.ch_names == [f"EEG{idx:03d}" for idx in range(n_ch)]
+    # assert all(kind == "eeg" for kind in mne.io.pick.channel_type(raw.info, picks=range(n_ch)))
+    ch_types = raw.get_channel_types()  # <- robust across MNE versions
+    assert ch_types == ["eeg"] * n_ch
+
+    # events: shape and columns
+    assert events.shape == (n_events, 3)
+    assert np.all(events[:, 1] == 0)  # middle column zeros
+    assert np.all(events[:, 2] == 1)  # default event_id
+
+    # events strictly increasing and within range
+    assert np.all(np.diff(events[:, 0]) > 0)
+    assert events[0, 0] >= 0
+    assert events[-1, 0] < raw.n_times
+
+
+def test_events_evenly_spaced_and_exact_count():
+    # Choose parameters so n_times is large compared to NUMEVENTS
+    raw, events = get_dummy_raw(NCHANNELS=2, SFREQ=100.0, STOP=10.0, NUMEVENTS=25, random_state=1)
+    # evenly spaced in integer samples (monotonic, no duplicates, exact count)
+    samples = events[:, 0]
+    assert len(samples) == len(np.unique(samples))
+    diffs = np.diff(samples)
+    # Allow small variation due to integer rounding, but most diffs should be close to the median
+    med = int(np.median(diffs))
+    assert med > 0
+    assert np.mean(np.abs(diffs - med)) <= 1.0
+
+
+def test_zscore_stats_reasonable():
+    raw, _ = get_dummy_raw(NCHANNELS=3, SFREQ=250.0, STOP=8.0, NUMEVENTS=8, random_state=42)
+    X = raw.get_data()
+    means = X.mean(axis=1)
+    stds = X.std(axis=1)
+    assert np.allclose(means, 0.0, atol=3e-2)
+    assert np.allclose(stds, 1.0, atol=3e-2)
+
+
+def test_reproducibility_seed_and_generator():
+    a_raw, a_ev = get_dummy_raw(3, 200.0, 5.0, 7, random_state=123)
+    b_raw, b_ev = get_dummy_raw(3, 200.0, 5.0, 7, random_state=123)
+    c_raw, c_ev = get_dummy_raw(3, 200.0, 5.0, 7, random_state=124)
+
+    assert np.allclose(a_raw.get_data(), b_raw.get_data())
+    assert np.array_equal(a_ev, b_ev)
+
+    # Different seed should differ with overwhelming probability
+    assert not np.allclose(a_raw.get_data(), c_raw.get_data()) or not np.array_equal(a_ev, c_ev)
+
+    # Reproducibility with Generator
+    g1 = np.random.default_rng(999)
+    g2 = np.random.default_rng(999)
+    r1, e1 = get_dummy_raw(2, 128.0, 4.0, 5, random_state=g1)
+    r2, e2 = get_dummy_raw(2, 128.0, 4.0, 5, random_state=g2)
+    assert np.allclose(r1.get_data(), r2.get_data())
+    assert np.array_equal(e1, e2)
+
+
+def test_event_id_custom():
+    raw, events = get_dummy_raw(2, 100.0, 3.0, 6, event_id=7, random_state=0)
+    assert np.all(events[:, 2] == 7)
+
+
+def test_numevents_equal_to_samples():
+    # n_times = round(50 * 2.0) = 100
+    raw, events = get_dummy_raw(1, 50.0, 2.0, 100, random_state=0)
+    samples = events[:, 0]
+    assert samples[0] == 0
+    assert samples[-1] == raw.n_times - 1  # last valid index
+    assert np.all(np.diff(samples) == 1)  # one per sample
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        dict(NCHANNELS=0),
+        dict(SFREQ=0.0),
+        dict(STOP=0.0),
+        dict(NUMEVENTS=0),
+    ],
+)
+def test_invalid_parameters_raise(kwargs):
+    base = dict(NCHANNELS=2, SFREQ=100.0, STOP=2.0, NUMEVENTS=2)
+    base.update(kwargs)
+    with pytest.raises(ValueError):
+        _ = get_dummy_raw(**base)
+
+
+def test_numevents_exceeds_samples_raises():
+    # n_times = round(10 * 0.5) = 5; request 6 events → error
+    with pytest.raises(ValueError):
+        _ = get_dummy_raw(NCHANNELS=1, SFREQ=10.0, STOP=0.5, NUMEVENTS=6, random_state=0)
