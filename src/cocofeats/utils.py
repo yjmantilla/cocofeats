@@ -128,9 +128,8 @@ def find_minimal_unique_root(
     strict : bool, optional
         If True, raise on mixed/ambiguous separators for the chosen style.
         If False, coerce separators:
-           - windows: convert '/' → '\\'
-           - posix: convert '\\' → '/'
-
+        - Windows: convert ``/`` → ``\\``
+        - POSIX: convert ``\\`` → ``/``
     Returns
     -------
     str
