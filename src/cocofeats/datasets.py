@@ -2,6 +2,15 @@
 # https://github.com/yjmantilla/sovabids/blob/main/tests/test_bids.py
 # https://github.com/yjmantilla/sovabids/blob/main/sovabids/datasets.py
 
+
+from __future__ import annotations
+
+import os
+import re
+import tempfile
+from pathlib import Path, PureWindowsPath, PurePosixPath
+from typing import Union
+
 import fileinput
 import os
 import shutil
@@ -13,31 +22,129 @@ from mne_bids.write import _write_raw_brainvision
 from cocofeats.utils import get_num_digits
 
 
-def replace_brainvision_filename(fpath, newname):
-    """Replace the BrainVision filenames in a .vhdr file.
+
+PathLike = Union[str, os.PathLike]
+
+
+def replace_brainvision_filename(fpath: PathLike, newname: str) -> None:
+    """
+    Replace the BrainVision file references (``DataFile`` and ``MarkerFile``) in a ``.vhdr`` header.
+
+    This updates the entries in the ``[Common Infos]`` section so they point to
+    ``<newname>.eeg`` and ``<newname>.vmrk``. Any directory components in
+    ``newname`` are ignored and extensions (``.eeg`` or ``.vmrk``) are stripped.
 
     Parameters
     ----------
-    fpath : str
-        The path to the .vhdr file.
+    fpath : path-like
+        Path to the BrainVision header file (``.vhdr``).
     newname : str
-    The new name to replace in the .vhdr file.
+        Base name to set for the data and marker files. If it includes
+        an extension (``.eeg`` or ``.vmrk``), it will be removed.
 
     Returns
     -------
     None
+
+    Notes
+    -----
+    - The function edits only the ``[Common Infos]`` section if present; if those
+      keys aren't found there, it falls back to replacing any top-level
+      ``DataFile=...`` / ``MarkerFile=...`` lines it finds.
+    - Writing is done atomically via a temporary file in the same directory.
+    - The function tries to decode with UTF-8 first, then falls back to Latin-1,
+      which is commonly used by BrainVision headers.
+
+    Examples
+    --------
+    >>> replace_brainvision_filename("recording.vhdr", "session01")
+    >>> replace_brainvision_filename("recording.vhdr", "session01.eeg")  # extension stripped
     """
-    if ".eeg" in newname:
-        newname = newname.replace(".eeg", "")
-    if ".vmrk" in newname:
-        newname = newname.replace(".vmrk", "")
-    for line in fileinput.input(fpath, inplace=True):
-        if "DataFile" in line:
-            print(f"DataFile={newname}.eeg".format(fileinput.filelineno(), line))
-        elif "MarkerFile" in line:
-            print(f"MarkerFile={newname}.vmrk".format(fileinput.filelineno(), line))
-        else:
-            print(f"{line}", end="")
+    path = Path(fpath)
+    if not path.exists():
+        raise FileNotFoundError(f"No such file: {path}")
+
+    # Normalize newname: drop directories and strip .eeg/.vmrk (case-insensitive)
+    base = os.path.basename(newname)
+    base = re.sub(r"\.(eeg|vmrk)$", "", base, flags=re.IGNORECASE)
+
+    # Read bytes; decode with UTF-8, fallback to Latin-1
+    raw = path.read_bytes()
+    for enc in ("utf-8", "latin-1"):
+        try:
+            text = raw.decode(enc)
+            encoding = enc
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        # Last-resort: replace errors (keeps file usable)
+        text = raw.decode("utf-8", errors="replace")
+        encoding = "utf-8"
+
+    # Keep original line endings by splitting with keepends=True
+    lines = text.splitlines(keepends=True)
+
+    # Regex helpers
+    section_re = re.compile(r"^\s*\[(?P<name>.+?)\]\s*$")
+    datafile_re = re.compile(r"^\s*DataFile\s*=.*$", flags=re.IGNORECASE)
+    marker_re = re.compile(r"^\s*MarkerFile\s*=.*$", flags=re.IGNORECASE)
+    lineend_re = re.compile(r"(\r\n|\r|\n)$")
+
+    def _ending(s: str) -> str:
+        m = lineend_re.search(s)
+        return m.group(1) if m else ""
+
+    def _set_datafile(end: str) -> str:
+        return f"DataFile={base}.eeg{end}"
+
+    def _set_markerfile(end: str) -> str:
+        return f"MarkerFile={base}.vmrk{end}"
+
+    # First pass: replace within [Common Infos] if present
+    inside_common = False
+    changed = False
+    for i, line in enumerate(lines):
+        m = section_re.match(line)
+        if m:
+            inside_common = (m.group("name").strip().lower() == "common infos")
+            continue
+
+        if inside_common and datafile_re.match(line):
+            lines[i] = _set_datafile(_ending(line))
+            changed = True
+            continue
+        if inside_common and marker_re.match(line):
+            lines[i] = _set_markerfile(_ending(line))
+            changed = True
+            continue
+
+    # Fallback: if nothing changed, replace any top-level occurrences
+    if not changed:
+        for i, line in enumerate(lines):
+            if datafile_re.match(line):
+                lines[i] = _set_datafile(_ending(line))
+                changed = True
+            elif marker_re.match(line):
+                lines[i] = _set_markerfile(_ending(line))
+                changed = True
+
+    # Write back atomically
+    tmp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", delete=False, dir=str(path.parent), encoding=encoding, newline=""
+        ) as tf:
+            tmp_path = Path(tf.name)
+            tf.writelines(lines)
+        tmp_path.replace(path)
+    finally:
+        # Clean up if something went wrong before replace
+        if tmp_path is not None and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
 
 
 def make_dummy_dataset(
