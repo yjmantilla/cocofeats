@@ -26,6 +26,10 @@ ruff check src/ (fix with `ruff check src/ --fix` if needed)
 black --check . (fix with `black .` if needed)
 pytest -q
 
+# To debug pytest, use:
+pytest -q --pdb
+pytest -s -q --no-cov --pdb
+
 # Build docs
 sphinx-build -b html docs docs/_build/html -W --keep-going
 ```
