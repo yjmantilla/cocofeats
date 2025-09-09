@@ -57,9 +57,9 @@ RulesLike = Mapping[str, Any] | Pathish | IO[str]
 def load_yaml(rules: RulesLike) -> dict[str, Any]:
     """
     Load a rules dictionary from:
-      • a mapping (returned deep-copied),
-      • a path (str/PathLike), or
-      • a text file-like object.
+      - a mapping (returned deep-copied),
+      - a path (str/PathLike), or
+      - a text file-like object.
 
     Features:
       - Safe loader (no object construction).
