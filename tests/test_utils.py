@@ -9,6 +9,7 @@ from pathlib import PureWindowsPath, PurePosixPath
 
 # Tests for get_num_digits function
 
+
 @pytest.mark.parametrize(
     "n, expected",
     [
@@ -66,6 +67,7 @@ def test_negative_numbers_consistency():
 
 
 # Tests for get_path function
+
 
 def test_returns_same_path_for_string_no_mount():
     path = "/data/files"
@@ -152,7 +154,9 @@ def _parent_dir(path) -> str | None:
     return parent
     return None if parent == path else parent
 
+
 # Tests for find_minimal_unique_root function
+
 
 @pytest.mark.parametrize(
     "filepaths",
@@ -177,17 +181,21 @@ def test_minimal_unique_root_properties_posix(filepaths, monkeypatch):
     root = find_minimal_unique_root(filepaths)
 
     # 1) Root must be a common ancestor of all files
-    assert all(_is_prefix_path(root, p) for p in filepaths), "Returned root is not a common ancestor."
+    assert all(
+        _is_prefix_path(root, p) for p in filepaths
+    ), "Returned root is not a common ancestor."
 
     # 2) Relative paths from root must be unique
-    assert _has_unique_relpaths(root, filepaths), "Relative paths are not unique from the returned root."
+    assert _has_unique_relpaths(
+        root, filepaths
+    ), "Relative paths are not unique from the returned root."
 
     # 3) Minimality: parent of root must NOT satisfy uniqueness (or root is already top-level)
     parent = _parent_dir(root)
     if parent is not None:
-        assert not _has_unique_relpaths(parent, filepaths), (
-            "Returned root is not minimal: its parent still yields unique relative paths."
-        )
+        assert not _has_unique_relpaths(
+            parent, filepaths
+        ), "Returned root is not minimal: its parent still yields unique relative paths."
 
 
 def test_identical_paths_edge_case():
@@ -238,6 +246,7 @@ def test_minimal_unique_root_windows_like_paths(filepaths):
     if parent is not None:
         assert not _has_unique_relpaths(parent, filepaths)
 
+
 if __name__ == "__main__":
-    #pytest.main([__file__])
+    # pytest.main([__file__])
     test_identical_paths_edge_case()

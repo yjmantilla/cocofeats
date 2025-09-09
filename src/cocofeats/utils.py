@@ -1,13 +1,16 @@
 import math
-from pathlib import PureWindowsPath, PurePosixPath
-from typing import Literal, Sequence, Union
-import os, ntpath, posixpath
-from typing import Sequence, Union
+import ntpath
+import os
+import posixpath
+from collections.abc import Sequence
+from pathlib import PurePosixPath, PureWindowsPath
+from typing import Literal
 
 from cocofeats.loggers import get_logger
+
 log = get_logger(__name__)
 
-PathLike = Union[str, os.PathLike]
+PathLike = str | os.PathLike
 
 
 def get_num_digits(n: int, method: Literal["safe", "fast"] = "safe") -> int:
@@ -107,8 +110,8 @@ def get_path(path: str | dict[str, str], mount: str | None = None) -> str:
 def find_minimal_unique_root(
     filepaths: Sequence[PathLike],
     *,
-    style: str = "auto",   # {'auto','posix','windows'}
-    strict: bool = True    # if True, reject ambiguous/mixed inputs
+    style: str = "auto",  # {'auto','posix','windows'}
+    strict: bool = True,  # if True, reject ambiguous/mixed inputs
 ) -> str:
     """
     Find the shallowest root such that relative paths from it are unique.
@@ -161,7 +164,10 @@ def find_minimal_unique_root(
             log.debug("find_minimal_unique_root: mixed styles coerced to windows (lenient)")
         else:
             use_windows = all(flags)
-            log.debug("find_minimal_unique_root: inferred style", inferred="windows" if use_windows else "posix")
+            log.debug(
+                "find_minimal_unique_root: inferred style",
+                inferred="windows" if use_windows else "posix",
+            )
     elif style == "windows":
         use_windows = True
         log.debug("find_minimal_unique_root: explicit style", chosen="windows")
@@ -182,8 +188,7 @@ def find_minimal_unique_root(
         if strict:
             if not use_windows and "\\" in s:
                 log.debug(
-                    "find_minimal_unique_root: backslash in POSIX path with strict=True",
-                    path=s
+                    "find_minimal_unique_root: backslash in POSIX path with strict=True", path=s
                 )
                 raise ValueError(
                     f"Backslash found in POSIX path '{s}' (strict=True). "
@@ -192,9 +197,9 @@ def find_minimal_unique_root(
             paths.append(s)
         else:
             if use_windows:
-                paths.append(s.replace("/", "\\"))   # normalize separators
+                paths.append(s.replace("/", "\\"))  # normalize separators
             else:
-                paths.append(s.replace("\\", "/"))   # treat backslash as separator
+                paths.append(s.replace("\\", "/"))  # treat backslash as separator
     if not strict:
         log.debug("find_minimal_unique_root: coerced separators", use_windows=use_windows)
 
@@ -202,7 +207,7 @@ def find_minimal_unique_root(
     paths = [pmod.normpath(s) for s in paths]
     log.debug(
         "find_minimal_unique_root: normalized paths sample",
-        sample=paths[:3] if len(paths) > 3 else paths
+        sample=paths[:3] if len(paths) > 3 else paths,
     )
 
     # Upper bound common prefix
@@ -215,7 +220,9 @@ def find_minimal_unique_root(
 
     split = [PurePath(s).parts for s in paths]
     prefix_len = len(PurePath(common_prefix).parts)
-    log.debug("find_minimal_unique_root: prefix info", common_prefix=common_prefix, prefix_len=prefix_len)
+    log.debug(
+        "find_minimal_unique_root: prefix info", common_prefix=common_prefix, prefix_len=prefix_len
+    )
 
     # Try shallowest→deepest; first that yields unique relpaths wins
     for i in range(1, prefix_len + 1):
@@ -223,7 +230,7 @@ def find_minimal_unique_root(
         for parts in split:
             tail = parts[i:]
             rels.append(pmod.join(*tail) if tail else "")
-        unique = (len(rels) == len(set(rels)))
+        unique = len(rels) == len(set(rels))
         log.debug("find_minimal_unique_root: candidate check", depth=i, unique=unique)
         if unique:
             head = split[0][:i]

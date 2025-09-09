@@ -7,13 +7,9 @@ from __future__ import annotations
 
 import os
 import re
-import tempfile
-from pathlib import Path, PureWindowsPath, PurePosixPath
-from typing import Union
-
-import fileinput
-import os
 import shutil
+import tempfile
+from pathlib import Path
 
 import mne
 import numpy as np
@@ -21,9 +17,7 @@ from mne_bids.write import _write_raw_brainvision
 
 from cocofeats.utils import get_num_digits
 
-
-
-PathLike = Union[str, os.PathLike]
+PathLike = str | os.PathLike
 
 
 def replace_brainvision_filename(fpath: PathLike, newname: str) -> None:
@@ -107,7 +101,7 @@ def replace_brainvision_filename(fpath: PathLike, newname: str) -> None:
     for i, line in enumerate(lines):
         m = section_re.match(line)
         if m:
-            inside_common = (m.group("name").strip().lower() == "common infos")
+            inside_common = m.group("name").strip().lower() == "common infos"
             continue
 
         if inside_common and datafile_re.match(line):

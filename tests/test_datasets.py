@@ -30,12 +30,7 @@ def test_replace_in_common_infos_only(tmp_path: Path):
 
 def test_fallback_when_no_common_infos(tmp_path: Path):
     vhdr = tmp_path / "rec.vhdr"
-    content = (
-        "DataFile=old.eeg\n"
-        "MarkerFile=old.vmrk\n"
-        "[Some Other]\n"
-        "Key=Value\n"
-    )
+    content = "DataFile=old.eeg\n" "MarkerFile=old.vmrk\n" "[Some Other]\n" "Key=Value\n"
     vhdr.write_text(content, encoding="utf-8")
 
     replace_brainvision_filename(vhdr, "baseX")
@@ -74,11 +69,7 @@ def test_preserve_crlf_line_endings(tmp_path: Path):
 
 def test_case_insensitive_keys_and_extensions(tmp_path: Path):
     vhdr = tmp_path / "rec.vhdr"
-    content = (
-        "[Common Infos]\n"
-        "datafile=OLD.EEG\n"
-        "markerfile=OLD.VMRK\n"
-    )
+    content = "[Common Infos]\n" "datafile=OLD.EEG\n" "markerfile=OLD.VMRK\n"
     vhdr.write_text(content, encoding="utf-8")
 
     # Provide newname with extension (case-insensitive) and directories
@@ -113,11 +104,7 @@ def test_latin1_roundtrip(tmp_path: Path):
 
 def test_no_keys_no_change(tmp_path: Path):
     vhdr = tmp_path / "rec.vhdr"
-    content = (
-        "[Common Infos]\n"
-        "Version=1.0\n"
-        "SomeOtherKey=Value\n"
-    )
+    content = "[Common Infos]\n" "Version=1.0\n" "SomeOtherKey=Value\n"
     vhdr.write_text(content, encoding="utf-8")
     before = vhdr.read_bytes()
 
@@ -136,11 +123,7 @@ def test_missing_file_raises(tmp_path: Path):
 def test_fallback_replaces_anywhere_when_no_common_infos(tmp_path: Path):
     # Ensure that if [Common Infos] is absent, *any* occurrences are changed
     vhdr = tmp_path / "rec.vhdr"
-    content = (
-        "[Other]\n"
-        "DataFile=old.eeg\n"
-        "MarkerFile=old.vmrk\n"
-    )
+    content = "[Other]\n" "DataFile=old.eeg\n" "MarkerFile=old.vmrk\n"
     vhdr.write_text(content, encoding="utf-8")
 
     replace_brainvision_filename(vhdr, "X")
