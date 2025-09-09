@@ -2,7 +2,10 @@
 import os
 from pathlib import Path
 import pytest
-from cocofeats.datasets import replace_brainvision_filename
+from cocofeats.datasets import replace_brainvision_filename, make_dummy_dataset
+
+
+# Tests for replace_brainvision_filename function
 
 
 def test_replace_in_common_infos_only(tmp_path: Path):
@@ -131,3 +134,177 @@ def test_fallback_replaces_anywhere_when_no_common_infos(tmp_path: Path):
     txt = vhdr.read_text(encoding="utf-8")
     assert "DataFile=X.eeg" in txt
     assert "MarkerFile=X.vmrk" in txt
+
+
+# Tests for make_dummy_dataset function
+
+
+def _write(p: Path, text: str = "dummy\n") -> Path:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def test_creates_expected_structure_and_counts(tmp_path: Path):
+    ex = _write(tmp_path / "example.dat", "content\n")
+
+    root = tmp_path / "out"
+    # Grid: NSUBS=2, NRUNS=2, others=1 → 4 files per example
+    make_dummy_dataset(
+        EXAMPLE=str(ex),
+        ROOT=str(root),
+        NSUBS=2,
+        NTASKS=1,
+        NSESSIONS=1,
+        NACQS=1,
+        NRUNS=2,
+        DATASET="DUMMY",
+        PATTERN="T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    )
+
+    files = list(root.rglob("*.dat"))
+    assert len(files) == 4
+
+    # 0-based indices with zero-pad width inferred from counts (=1 here)
+    expect1 = root / "TTA0" / "SSE0" / "subSU0_AC0_0.dat"
+    expect2 = root / "TTA0" / "SSE0" / "subSU1_AC0_1.dat"
+    assert expect1.exists()
+    assert expect2.exists()
+
+
+def test_indices_zero_based_and_zero_padded(tmp_path: Path):
+    # NSUBS=12 → subjects SU00..SU11 (width=2)
+    ex = _write(tmp_path / "example.bin", "x\n")
+    root = tmp_path / "outpad"
+
+    make_dummy_dataset(
+        EXAMPLE=str(ex),
+        ROOT=str(root),
+        NSUBS=12,
+        NTASKS=1,
+        NSESSIONS=1,
+        NACQS=1,
+        NRUNS=1,
+        DATASET="Demo",
+        PATTERN="T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    )
+
+    files = list(root.rglob("*.bin"))
+    assert len(files) == 12
+
+    p0 = root / "TTA0" / "SSE0" / "subSU00_AC0_0.bin"
+    p11 = root / "TTA0" / "SSE0" / "subSU11_AC0_0.bin"
+    p12 = root / "TTA0" / "SSE0" / "subSU12_AC0_0.bin"  # should NOT exist (range goes 0..11)
+    assert p0.exists()
+    assert p11.exists()
+    assert not p12.exists()
+
+
+def test_multiple_examples_copied_per_combination(tmp_path: Path):
+    ex1 = _write(tmp_path / "ex.txt", "a\n")
+    ex2 = _write(tmp_path / "ex.dat", "b\n")
+    root = tmp_path / "multi"
+
+    make_dummy_dataset(
+        EXAMPLE=[str(ex1), str(ex2)],
+        ROOT=str(root),
+        NSUBS=1,
+        NTASKS=1,
+        NSESSIONS=1,
+        NACQS=1,
+        NRUNS=2,
+        DATASET="D",
+        PATTERN="T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    )
+
+    base0 = root / "TTA0" / "SSE0" / "subSU0_AC0_0"
+    base1 = root / "TTA0" / "SSE0" / "subSU0_AC0_1"
+    assert (base0.with_suffix(".txt")).exists()
+    assert (base0.with_suffix(".dat")).exists()
+    assert (base1.with_suffix(".txt")).exists()
+    assert (base1.with_suffix(".dat")).exists()
+
+
+def test_brainvision_headers_updated(tmp_path: Path):
+    # Minimal BrainVision trio: .vhdr/.vmrk headers + .eeg blob
+    vhdr = tmp_path / "template.vhdr"
+    vmrk = tmp_path / "template.vmrk"
+    eeg = tmp_path / "template.eeg"
+
+    vhdr.write_text(
+        "[Common Infos]\n"
+        "DataFile=oldname.eeg\n"
+        "MarkerFile=oldname.vmrk\n"
+        "\n[Binary Infos]\n"
+        "DataFormat=BINARY\n",
+        encoding="utf-8",
+    )
+    vmrk.write_text(
+        "[Common Infos]\n" "Codepage=UTF-8\n",
+        encoding="utf-8",
+    )
+    eeg.write_bytes(b"\x00" * 8)
+
+    root = tmp_path / "bv"
+    make_dummy_dataset(
+        EXAMPLE=[str(vhdr), str(vmrk), str(eeg)],
+        ROOT=str(root),
+        NSUBS=1,
+        NTASKS=1,
+        NSESSIONS=1,
+        NACQS=1,
+        NRUNS=1,
+        DATASET="BV",
+        PATTERN="T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    )
+
+    gen_base = root / "TTA0" / "SSE0" / "subSU0_AC0_0"
+    out_vhdr = gen_base.with_suffix(".vhdr")
+    out_vmrk = gen_base.with_suffix(".vmrk")
+    out_eeg = gen_base.with_suffix(".eeg")
+
+    assert out_vhdr.exists()
+    assert out_vmrk.exists()
+    assert out_eeg.exists()
+
+    txt = out_vhdr.read_text(encoding="utf-8")
+    assert "DataFile=subSU0_AC0_0.eeg" in txt
+    assert "MarkerFile=subSU0_AC0_0.vmrk" in txt
+
+
+def test_custom_prefixes_applied(tmp_path: Path):
+    ex = _write(tmp_path / "file.bin", "x\n")
+    root = tmp_path / "custom"
+
+    prefixes = {"subject": "S", "session": "Sess", "task": "T", "acquisition": "A", "run": "R"}
+
+    make_dummy_dataset(
+        EXAMPLE=str(ex),
+        ROOT=str(root),
+        NSUBS=1,
+        NTASKS=1,
+        NSESSIONS=1,
+        NACQS=1,
+        NRUNS=1,
+        DATASET="X",
+        PREFIXES=prefixes,
+        PATTERN="T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    )
+
+    expected = root / "TT0" / "SSess0" / "subS0_A0_0.bin"
+    assert expected.exists()
+
+
+def test_raises_when_example_missing(tmp_path: Path):
+    root = tmp_path / "err"
+    missing = tmp_path / "nope.dat"
+    with pytest.raises(FileNotFoundError):
+        make_dummy_dataset(
+            EXAMPLE=str(missing),
+            ROOT=str(root),
+            NSUBS=1,
+            NTASKS=1,
+            NSESSIONS=1,
+            NACQS=1,
+            NRUNS=1,
+        )
