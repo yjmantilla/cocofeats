@@ -42,3 +42,39 @@ def get_num_digits(n: int, method: Literal["safe", "fast"] = "safe") -> int:
         return int(math.log10(n_abs)) + 1
 
     raise ValueError(f"Unknown method: {method!r}. Use 'safe' or 'fast'.")
+
+
+def get_path(path: str | dict[str, str], mount: str | None = None) -> str:
+    """
+    Retrieve the resolved path based on a given mount key or return the path directly.
+
+    Parameters
+    ----------
+    path : str or dict of str
+        A file path string or a dictionary mapping mount names to paths.
+    mount : str, optional
+        The mount key to use if ``path`` is a dictionary. If None or if ``path``
+        is not a dictionary, the function returns ``path`` directly.
+
+    Returns
+    -------
+    str
+        The resolved path.
+
+    Raises
+    ------
+    KeyError
+        If ``mount`` is provided but not found in the dictionary ``path``.
+
+    Examples
+    --------
+    >>> get_path("/data/files")
+    '/data/files'
+
+    >>> paths = {"local": "/mnt/local/data", "remote": "/mnt/remote/data"}
+    >>> get_path(paths, mount="local")
+    '/mnt/local/data'
+    """
+    if isinstance(path, dict) and mount is not None:
+        return path[mount]
+    return path

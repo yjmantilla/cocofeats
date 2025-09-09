@@ -1,7 +1,7 @@
 # tests/test_get_num_digits.py
 import pytest
 
-from cocofeats.utils import get_num_digits
+from cocofeats.utils import get_num_digits, get_path
 
 
 @pytest.mark.parametrize(
@@ -58,3 +58,33 @@ def test_negative_numbers_consistency():
         fast = get_num_digits(n, method="fast")
         assert safe == fast
         assert safe == len(str(abs(n)))
+
+
+def test_returns_same_path_for_string_no_mount():
+    path = "/data/files"
+    assert get_path(path) == "/data/files"
+
+
+def test_returns_same_path_for_string_with_mount_ignored():
+    path = "/data/files"
+    assert get_path(path, mount="local") == "/data/files"
+
+
+def test_returns_mounted_value_when_dict_and_mount_present():
+    paths = {"local": "/mnt/local/data", "remote": "/mnt/remote/data"}
+    assert get_path(paths, mount="local") == "/mnt/local/data"
+    assert get_path(paths, mount="remote") == "/mnt/remote/data"
+
+
+def test_raises_keyerror_when_mount_missing_in_dict():
+    paths = {"local": "/mnt/local/data"}
+    with pytest.raises(KeyError):
+        _ = get_path(paths, mount="remote")
+
+
+def test_returns_dict_when_mount_is_none_and_path_is_dict():
+    # NOTE: Given the current implementation, if `path` is a dict and `mount` is None,
+    # the function returns the dictionary itself.
+    # If you want it to *always* return a string, update the implementation accordingly.
+    paths = {"local": "/mnt/local/data"}
+    assert get_path(paths, mount=None) is paths
