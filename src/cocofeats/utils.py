@@ -4,6 +4,9 @@ from typing import Literal, Sequence, Union
 import os, ntpath, posixpath
 from typing import Sequence, Union
 
+from cocofeats.loggers import get_logger
+log = get_logger(__name__)
+
 PathLike = Union[str, os.PathLike]
 
 
@@ -35,17 +38,25 @@ def get_num_digits(n: int, method: Literal["safe", "fast"] = "safe") -> int:
     >>> get_num_digits(-999, method="fast")
     3
     """
+    log.debug("get_num_digits: called", n=n, method=method)
+
     if n == 0:
+        log.debug("get_num_digits: zero has one digit")
         return 1
 
     n_abs = abs(n)
 
     if method == "safe":
-        return len(str(n_abs))
+        digits = len(str(n_abs))
+        log.debug("get_num_digits: computed (safe)", n=n, digits=digits)
+        return digits
 
     if method == "fast":
-        return int(math.log10(n_abs)) + 1
+        digits = int(math.log10(n_abs)) + 1
+        log.debug("get_num_digits: computed (fast)", n=n, digits=digits)
+        return digits
 
+    log.debug("get_num_digits: invalid method", method=method)
     raise ValueError(f"Unknown method: {method!r}. Use 'safe' or 'fast'.")
 
 
@@ -80,9 +91,18 @@ def get_path(path: str | dict[str, str], mount: str | None = None) -> str:
     >>> get_path(paths, mount="local")
     '/mnt/local/data'
     """
+    log.debug("get_path: called", mount=mount, path_type=type(path).__name__)
     if isinstance(path, dict) and mount is not None:
-        return path[mount]
+        try:
+            resolved = path[mount]
+            log.debug("get_path: resolved via mount", mount=mount, resolved=resolved)
+            return resolved
+        except KeyError:
+            log.debug("get_path: missing mount key", mount=mount, available=list(path.keys()))
+            raise
+    log.debug("get_path: returning direct path", path=path)
     return path
+
 
 def find_minimal_unique_root(
     filepaths: Sequence[PathLike],
@@ -119,9 +139,11 @@ def find_minimal_unique_root(
         If filepaths is empty, or styles are mixed with strict=True.
     """
     if not filepaths:
+        log.debug("find_minimal_unique_root: empty input")
         raise ValueError("filepaths must be non-empty")
 
     raw = [os.fspath(p) for p in filepaths]
+    log.debug("find_minimal_unique_root: called", n_paths=len(raw), style=style, strict=strict)
 
     def looks_windows(s: str) -> bool:
         # Drive letter or backslash suggests Windows intent
@@ -132,16 +154,22 @@ def find_minimal_unique_root(
         flags = [looks_windows(s) for s in raw]
         if any(flags) and not all(flags):
             if strict:
+                log.debug("find_minimal_unique_root: mixed styles rejected (strict=True)")
                 raise ValueError("Mixed POSIX/Windows styles are not supported (strict=True).")
             # Lenient: pick windows if any looks windows
             use_windows = True
+            log.debug("find_minimal_unique_root: mixed styles coerced to windows (lenient)")
         else:
             use_windows = all(flags)
+            log.debug("find_minimal_unique_root: inferred style", inferred="windows" if use_windows else "posix")
     elif style == "windows":
         use_windows = True
+        log.debug("find_minimal_unique_root: explicit style", chosen="windows")
     elif style == "posix":
         use_windows = False
+        log.debug("find_minimal_unique_root: explicit style", chosen="posix")
     else:
+        log.debug("find_minimal_unique_root: invalid style", style=style)
         raise ValueError("style must be 'auto', 'posix', or 'windows'.")
 
     # Pick modules/classes per style
@@ -152,25 +180,30 @@ def find_minimal_unique_root(
     paths = []
     for s in raw:
         if strict:
-            if use_windows:
-                # ok to have either '/' or '\\' on Windows
-                pass
-            else:
-                # POSIX: backslash should not be a separator
-                if "\\" in s:
-                    raise ValueError(
-                        f"Backslash found in POSIX path '{s}' (strict=True). "
-                        "Use strict=False to coerce '\\' → '/'."
-                    )
+            if not use_windows and "\\" in s:
+                log.debug(
+                    "find_minimal_unique_root: backslash in POSIX path with strict=True",
+                    path=s
+                )
+                raise ValueError(
+                    f"Backslash found in POSIX path '{s}' (strict=True). "
+                    "Use strict=False to coerce '\\' → '/'."
+                )
             paths.append(s)
         else:
             if use_windows:
                 paths.append(s.replace("/", "\\"))   # normalize separators
             else:
                 paths.append(s.replace("\\", "/"))   # treat backslash as separator
+    if not strict:
+        log.debug("find_minimal_unique_root: coerced separators", use_windows=use_windows)
 
     # Normalize with the chosen flavor
     paths = [pmod.normpath(s) for s in paths]
+    log.debug(
+        "find_minimal_unique_root: normalized paths sample",
+        sample=paths[:3] if len(paths) > 3 else paths
+    )
 
     # Upper bound common prefix
     try:
@@ -178,9 +211,11 @@ def find_minimal_unique_root(
     except ValueError:
         # e.g., different drives on Windows → no common path
         common_prefix = ""
+        log.debug("find_minimal_unique_root: no common path (e.g., different drives)")
 
     split = [PurePath(s).parts for s in paths]
     prefix_len = len(PurePath(common_prefix).parts)
+    log.debug("find_minimal_unique_root: prefix info", common_prefix=common_prefix, prefix_len=prefix_len)
 
     # Try shallowest→deepest; first that yields unique relpaths wins
     for i in range(1, prefix_len + 1):
@@ -188,8 +223,15 @@ def find_minimal_unique_root(
         for parts in split:
             tail = parts[i:]
             rels.append(pmod.join(*tail) if tail else "")
-        if len(rels) == len(set(rels)):
+        unique = (len(rels) == len(set(rels)))
+        log.debug("find_minimal_unique_root: candidate check", depth=i, unique=unique)
+        if unique:
             head = split[0][:i]
-            return pmod.normpath(pmod.join(*head))
+            chosen = pmod.normpath(pmod.join(*head))
+            log.debug("find_minimal_unique_root: selected minimal root", root=chosen, depth=i)
+            return chosen
 
-    return pmod.normpath(common_prefix) if common_prefix else common_prefix
+    # Fallback — full common path (may be empty)
+    fallback = pmod.normpath(common_prefix) if common_prefix else common_prefix
+    log.debug("find_minimal_unique_root: fallback to common prefix", root=fallback or "(none)")
+    return fallback
