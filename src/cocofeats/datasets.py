@@ -555,60 +555,91 @@ def save_dummy_vhdr(fpath: PathLike, dummy_args: dict[str, Any] | None = None) -
     return None
 
 
-def generate_dummy_dataset(data_params=None):
+def generate_dummy_dataset(data_params: dict[str, Any] | None = None) -> None:
     """
-    Generate a dummy dataset.
+    Generate a dummy dataset on disk.
+
+    This function prepares an example file set (a BrainVision trio: ``.vhdr``,
+    ``.vmrk``, ``.eeg``) if the caller does not supply one, then replicates it
+    across a directory structure defined by a placeholder pattern using
+    :func:`cocofeats.datasets.make_dummy_dataset`.
 
     Parameters
     ----------
     data_params : dict, optional
-        Parameters for dataset generation (e.g., number of subjects, sessions, tasks,
-        acquisitions, runs, prefixes, and root). See
-        :func:`sovabids.datasets.make_dummy_dataset` for the full argument set.
+        Parameters that control dataset generation. Recognized keys are forwarded
+        to :func:`cocofeats.datasets.make_dummy_dataset`, including (but not limited to):
+
+        - ``PATTERN`` : str
+            Pattern with placeholders (``%dataset%``, ``%task%``, ``%session%``,
+            ``%subject%``, ``%run%``, ``%acquisition%``).
+        - ``DATASET`` : str
+            Dataset name (used to replace ``%dataset%``).
+        - ``NSUBS``, ``NSESSIONS``, ``NTASKS``, ``NACQS``, ``NRUNS`` : int
+            Grid sizes for each placeholder dimension.
+        - ``PREFIXES`` : dict
+            Prefix mapping (e.g., ``{"subject": "SU", "session": "SE", ...}``).
+        - ``ROOT`` : path-like
+            Root directory where files will be generated.
+        - ``EXAMPLE`` : path-like or list of path-like
+            Example file(s) to replicate. If omitted, a BrainVision trio is created
+            automatically and used as the example.
 
     Returns
     -------
-    Any
-        Implementation-specific return value (e.g., list of created paths), or ``None``
-        if nothing was created.
+    None
+        This function performs file-system side effects only.
+
+    Notes
+    -----
+    - If ``EXAMPLE`` is omitted, an example BrainVision trio is created under
+      ``_data/<DATASET>/<DATASET>_template.vhdr`` and used as the source.
+    - If ``ROOT`` is omitted, files are generated under
+      ``_data/<DATASET>/<DATASET>_SOURCE`` relative to this module.
+    - Existing ``ROOT`` is removed before new files are created.
     """
+    # ---- Defaults (merged with user params) ----
+    defaults: dict[str, Any] = {
+        "PATTERN": "T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+        "DATASET": "DUMMY",
+        "NSUBS": 2,
+        "NTASKS": 2,
+        "NRUNS": 1,
+        "NSESSIONS": 1,
+        "NACQS": 1,
+        # PREFIXES / ROOT / EXAMPLE may be provided by caller
+    }
+    params = {**defaults, **(data_params or {})}
 
-    if data_params is None:
-        DEF_DATASET_PARAMS = {
-            "PATTERN": "T%task%/S%session%/sub%subject%_%acquisition%_%run%",
-            "DATASET": "DUMMY",
-            "NSUBS": 2,
-            "NTASKS": 2,
-            "NRUNS": 1,
-            "NSESSIONS": 1,
-            "NACQS": 1,
-        }
-        data_params = DEF_DATASET_PARAMS
-    # Getting current file path and then going to _data directory
-    this_dir = os.path.dirname(__file__)
-    data_dir = os.path.join(this_dir, "..", "..", "_data")
-    data_dir = os.path.abspath(data_dir)
+    dataset_name: str = params.get("DATASET", "DUMMY")
 
-    # Defining relevant conversion paths
-    dataset_name = data_params.get("DATASET", "DUMMY")
-    test_root = os.path.join(data_dir, dataset_name)
-    input_root = os.path.join(test_root, dataset_name + "_SOURCE")
-    bids_path = os.path.join(test_root, dataset_name + "_BIDS")
+    # Base _data directory (…/package_root/_data)
+    data_dir = (Path(__file__).parent / ".." / ".." / "_data").resolve()
+    data_dir.mkdir(parents=True, exist_ok=True)
 
-    # Make example File
-    example_fpath = save_dummy_vhdr(os.path.join(data_dir, "dummy.vhdr"))
+    # Default ROOT if not provided: _data/<DATASET>/<DATASET>_SOURCE
+    test_root = data_dir / dataset_name
+    default_root = test_root / f"{dataset_name}_SOURCE"
+    root = Path(params.get("ROOT", default_root))
 
-    # PARAMS for making the dummy dataset
-    DATA_PARAMS = {"EXAMPLE": example_fpath, "ROOT": input_root}
-    DATA_PARAMS.update(data_params)
+    # If EXAMPLE not provided, create a BrainVision trio to replicate
+    example = params.get("EXAMPLE", None)
+    if example is None:
+        template_vhdr = test_root / f"{dataset_name}_template.vhdr"
+        template_vhdr.parent.mkdir(parents=True, exist_ok=True)
+        trio = save_dummy_vhdr(
+            template_vhdr, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 1.0, "NUMEVENTS": 4}
+        )
+        if not trio:
+            raise RuntimeError("Failed to create example BrainVision files for dummy dataset.")
+        example = trio  # list[Path]
+        params["EXAMPLE"] = example
 
-    # Preparing directories
-    dirs = [input_root, bids_path]
-    for dir in dirs:
-        if os.path.isdir(dir):
-            shutil.rmtree(dir)
+    # Prepare output root (clean then create)
+    if root.exists():
+        shutil.rmtree(root)
+    root.mkdir(parents=True, exist_ok=True)
 
-    [os.makedirs(dir, exist_ok=True) for dir in dirs]
-
-    # Generating the dummy dataset
-    make_dummy_dataset(**DATA_PARAMS)
+    # Forward to make_dummy_dataset with our resolved ROOT
+    params["ROOT"] = root
+    make_dummy_dataset(**params)

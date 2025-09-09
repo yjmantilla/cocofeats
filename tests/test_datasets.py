@@ -1,11 +1,12 @@
 # Tests for cocofeats.datasets module
 from __future__ import annotations
-import os
+import sys, os
 import numpy as np
 from pathlib import Path
 import pytest
 import mne
 import re
+
 
 from cocofeats.datasets import (
     replace_brainvision_filename,
@@ -13,6 +14,7 @@ from cocofeats.datasets import (
     generate_1_over_f_noise,
     get_dummy_raw,
     save_dummy_vhdr,
+    generate_dummy_dataset,
 )
 
 
@@ -638,3 +640,155 @@ def test_returns_three_paths_of_type_pathlib_path(tmp_path: Path):
     )
     assert all(isinstance(p, Path) for p in paths)
     assert {p.suffix.lower() for p in paths} == {".vhdr", ".vmrk", ".eeg"}
+
+
+# Test for generate_dummy_dataset function
+
+
+def test_generate_with_example_and_root(tmp_path: Path):
+    # Two example files with different extensions
+    ex1 = _write(tmp_path / "example.txt", "txt\n")
+    ex2 = _write(tmp_path / "example.dat", "dat\n")
+
+    root = tmp_path / "OUT"
+    params = {
+        "EXAMPLE": [str(ex1), str(ex2)],
+        "ROOT": str(root),
+        "DATASET": "TST",
+        "NSUBS": 2,
+        "NTASKS": 1,
+        "NSESSIONS": 1,
+        "NACQS": 1,
+        "NRUNS": 2,
+        "PATTERN": "T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    }
+
+    result = generate_dummy_dataset(params)
+    assert result is None
+
+    # We expect NSUBS * NRUNS * (#examples) = 2*2*2 = 8 files
+    files = list(root.rglob("*.*"))
+    assert len(files) == 8
+
+    # 0-based indices and zero-padding width inferred from counts (=1 here)
+    base0 = root / "TTA0" / "SSE0" / "subSU0_AC0_0"
+    base3 = root / "TTA0" / "SSE0" / "subSU1_AC0_1"
+    assert (base0.with_suffix(".txt")).exists()
+    assert (base0.with_suffix(".dat")).exists()
+    assert (base3.with_suffix(".txt")).exists()
+    assert (base3.with_suffix(".dat")).exists()
+
+
+def test_existing_root_is_cleaned_before_generation(tmp_path: Path):
+    # Pre-create root with a sentinel file
+    root = tmp_path / "ROOTCLEAN"
+    sentinel = root / "to_be_removed.txt"
+    _write(sentinel, "remove me")
+
+    # Provide a single example to keep it light
+    ex = _write(tmp_path / "ex.bin", "x\n")
+
+    params = {
+        "EXAMPLE": str(ex),
+        "ROOT": str(root),
+        "DATASET": "CLEAN",
+        "NSUBS": 1,
+        "NTASKS": 1,
+        "NSESSIONS": 1,
+        "NACQS": 1,
+        "NRUNS": 1,
+    }
+
+    generate_dummy_dataset(params)
+
+    # Sentinel should be gone; one generated file should exist
+    assert not sentinel.exists()
+    files = list(root.rglob("*.bin"))
+    assert len(files) == 1
+
+
+def test_parameter_defaults_are_merged(tmp_path: Path):
+    # Provide minimal overrides: only EXAMPLE and ROOT
+    ex = _write(tmp_path / "ex.dat", "x\n")
+    root = tmp_path / "DEFROOT"
+
+    params = {
+        "EXAMPLE": str(ex),
+        "ROOT": str(root),
+        # No DATASET/COUNTS/PATTERN keys → defaults apply
+    }
+
+    generate_dummy_dataset(params)
+
+    # Defaults in your function: NSUBS=2, NTASKS=2, NRUNS=1, NSESSIONS=1, NACQS=1
+    # → total files = 2*2*1*1*1 * 1 example = 4
+    files = list(root.rglob("*.dat"))
+    assert len(files) == 4
+
+    # Expected a couple of default-named paths (0-based)
+    assert (root / "TTA0" / "SSE0" / "subSU0_AC0_0.dat").exists()
+    assert (root / "TTA1" / "SSE0" / "subSU1_AC0_0.dat").exists()
+
+
+@pytest.mark.skipif(pytest.importorskip("mne") is None, reason="mne not available")
+def test_auto_template_creation_when_example_missing(tmp_path: Path):
+    """
+    If EXAMPLE is omitted, the function should create a BrainVision trio in
+    _data/<DATASET>/<DATASET>_template.vhdr, then use it to populate ROOT.
+    """
+    # Import the module to compute the expected _data path relative to it
+    from cocofeats import datasets  # ← change this to the real module
+    import shutil
+
+    dataset_name = "AUTOTPL"
+    root = tmp_path / "AUTOOUT"
+
+    params = {
+        "ROOT": str(root),
+        "DATASET": dataset_name,
+        "NSUBS": 1,
+        "NTASKS": 1,
+        "NSESSIONS": 1,
+        "NACQS": 1,
+        "NRUNS": 1,
+        # EXAMPLE intentionally omitted
+    }
+
+    # Compute expected template location: .../package/_data/<DATASET>/<DATASET>_template.vhdr
+    data_dir = (Path(datasets.__file__).parent / ".." / ".." / "_data").resolve()
+    tpl_dir = data_dir / dataset_name
+    tpl_vhdr = tpl_dir / f"{dataset_name}_template.vhdr"
+    tpl_vmrk = tpl_dir / f"{dataset_name}_template.vmrk"
+    tpl_eeg = tpl_dir / f"{dataset_name}_template.eeg"
+
+    # Ensure clean slate for the dataset entry under _data
+    if tpl_dir.exists():
+        shutil.rmtree(tpl_dir)
+
+    try:
+        generate_dummy_dataset(params)
+        # Template trio should have been created
+        assert tpl_vhdr.exists()
+        assert tpl_vmrk.exists()
+        assert tpl_eeg.exists()
+        # And ROOT should have one set of files generated (copy of trio)
+        base = root / "TTA0" / "SSE0" / "subSU0_AC0_0"
+        assert (
+            base.with_suffix(".vhdr").exists()
+            or base.with_suffix(".eeg").exists()
+            or base.with_suffix(".vmrk").exists()
+        )
+    finally:
+        # Cleanup the template directory we created in the package's _data
+        if tpl_dir.exists():
+            shutil.rmtree(tpl_dir)
+
+
+def test_returns_none(tmp_path: Path):
+    ex = _write(tmp_path / "ex.txt", "content\n")
+    params = {
+        "EXAMPLE": str(ex),
+        "ROOT": str(tmp_path / "RETNONE"),
+    }
+    out = generate_dummy_dataset(params)
+    assert out is None
