@@ -135,13 +135,13 @@ def configure_logging(
         handler.setFormatter(logging.Formatter("%(message)s"))
 
         processors = [
-            structlog.contextvars.merge_contextvars,       # include contextvars if used
-            structlog.stdlib.filter_by_level,              # drop events below level early
-            structlog.processors.add_log_level,            # add 'level' field
+            structlog.contextvars.merge_contextvars,  # include contextvars if used
+            structlog.stdlib.filter_by_level,  # drop events below level early
+            structlog.processors.add_log_level,  # add 'level' field
             structlog.processors.TimeStamper(fmt="iso", utc=True),
             structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,          # clean tracebacks
-            structlog.stdlib.add_logger_name,              # logger name field
+            structlog.processors.format_exc_info,  # clean tracebacks
+            structlog.stdlib.add_logger_name,  # logger name field
             structlog.stdlib.PositionalArgumentsFormatter(),
         ]
         render = structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
