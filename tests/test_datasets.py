@@ -1,8 +1,13 @@
-# tests/test_replace_brainvision_filename.py
+# Tests for cocofeats.datasets module
 import os
+import numpy as np
 from pathlib import Path
 import pytest
-from cocofeats.datasets import replace_brainvision_filename, make_dummy_dataset
+from cocofeats.datasets import (
+    replace_brainvision_filename,
+    make_dummy_dataset,
+    generate_1_over_f_noise,
+)
 
 
 # Tests for replace_brainvision_filename function
@@ -308,3 +313,136 @@ def test_raises_when_example_missing(tmp_path: Path):
             NACQS=1,
             NRUNS=1,
         )
+
+
+# Test for generate_1_over_f_noise function
+
+
+def _welch_psd(x: np.ndarray, sfreq: float, n_seg: int = 1024, overlap: float = 0.5):
+    """
+    Minimal Welch PSD estimate for 1D signal x (time,), returns (freqs, psd).
+    """
+    x = np.asarray(x, float)
+    n = x.size
+    step = int(n_seg * (1 - overlap))
+    if step <= 0:
+        step = n_seg // 2 or 1
+    # Build segments
+    starts = np.arange(0, max(n - n_seg + 1, 1), step, dtype=int)
+    if starts.size == 0:
+        starts = np.array([0], dtype=int)
+    window = np.hanning(n_seg)
+    wnorm = (window ** 2).sum()
+    acc = None
+    for s in starts:
+        seg = x[s : s + n_seg]
+        if seg.size < n_seg:
+            # zero-pad last segment
+            seg = np.pad(seg, (0, n_seg - seg.size))
+        seg = seg * window
+        spec = np.fft.rfft(seg)
+        psd = (np.abs(spec) ** 2) / (wnorm * sfreq)
+        acc = psd if acc is None else (acc + psd)
+    psd = acc / starts.size
+    freqs = np.fft.rfftfreq(n_seg, d=1.0 / sfreq)
+    return freqs, psd
+
+
+def _slope_loglog(freqs: np.ndarray, psd: np.ndarray) -> float:
+    """
+    Fit slope of log10(PSD) vs log10(freq) over a mid-band region.
+    Excludes DC and highest 10% of bins to avoid edge effects.
+    """
+    valid = freqs > 0
+    freqs = freqs[valid]
+    psd = psd[valid]
+    if freqs.size < 8:
+        # too few points; fall back to simple fit
+        pass
+    # Use middle band: 10%..90% to avoid edges
+    lo = int(0.10 * freqs.size)
+    hi = int(0.90 * freqs.size)
+    if hi <= lo:
+        lo, hi = 0, freqs.size
+    f = freqs[lo:hi]
+    p = psd[lo:hi]
+    slope, _ = np.polyfit(np.log10(f), np.log10(p + 1e-24), 1)
+    return slope
+
+
+def test_shape_and_zscore_stats():
+    n_channels, n_times = 6, 20_000
+    x = generate_1_over_f_noise(n_channels, n_times, exponent=1.0, sfreq=250.0, random_state=0)
+    assert x.shape == (n_channels, n_times)
+    means = x.mean(axis=1)
+    stds = x.std(axis=1)
+    assert np.allclose(means, 0.0, atol=3e-2)
+    assert np.allclose(stds, 1.0, atol=3e-2)
+
+
+def test_reproducibility_seed_and_generator():
+    # Seed reproducibility
+    a1 = generate_1_over_f_noise(3, 8192, exponent=1.0, random_state=123)
+    a2 = generate_1_over_f_noise(3, 8192, exponent=1.0, random_state=123)
+    b = generate_1_over_f_noise(3, 8192, exponent=1.0, random_state=124)
+    assert np.allclose(a1, a2)
+    assert not np.allclose(a1, b)
+
+    # Generator reproducibility
+    g1 = np.random.default_rng(999)
+    g2 = np.random.default_rng(999)
+    c1 = generate_1_over_f_noise(2, 8192, exponent=0.5, random_state=g1)
+    c2 = generate_1_over_f_noise(2, 8192, exponent=0.5, random_state=g2)
+    assert np.allclose(c1, c2)
+
+
+@pytest.mark.parametrize(
+    "exp, tol",
+    [
+        (0.0, 0.20),  # white ≈ flat
+        (0.5, 0.40),  # pinkish
+        (1.0, 0.40),  # pink
+    ],
+)
+def test_spectral_slope_matches_exponent(exp, tol):
+    # Average slope across channels to reduce variance
+    sfreq = 200.0
+    n_times = 32768
+    n_channels = 8
+    x = generate_1_over_f_noise(n_channels, n_times, exponent=exp, sfreq=sfreq, random_state=7)
+
+    slopes = []
+    for ch in range(n_channels):
+        freqs, psd = _welch_psd(x[ch], sfreq=sfreq, n_seg=2048, overlap=0.5)
+        slopes.append(_slope_loglog(freqs, psd))
+    mean_slope = float(np.mean(slopes))
+    # For 1/f^alpha, slope ≈ -alpha
+    print(f"Exponent: {exp}, mean slope: {mean_slope:.2f} (tol {tol})")
+    assert abs(mean_slope + exp) < tol
+
+
+def test_dc_component_near_zero_after_standardization():
+    n_times = 4096
+    x = generate_1_over_f_noise(4, n_times, exponent=1.0, random_state=0)
+    dc = np.fft.rfft(x, axis=-1)[..., 0].real
+    assert np.allclose(dc, 0.0, atol=1e-10)
+
+
+def test_slope_consistency_across_sfreq():
+    # The spectral slope is unitless; it should be consistent across sfreq choices.
+    n_times = 32768
+    exp = 0.8
+    a = generate_1_over_f_noise(3, n_times, exponent=exp, sfreq=120.0, random_state=42)[0]
+    b = generate_1_over_f_noise(3, n_times, exponent=exp, sfreq=360.0, random_state=42)[0]
+
+    fa, pa = _welch_psd(a, sfreq=120.0, n_seg=2048, overlap=0.5)
+    fb, pb = _welch_psd(b, sfreq=360.0, n_seg=2048, overlap=0.5)
+    sa = _slope_loglog(fa, pa)
+    sb = _slope_loglog(fb, pb)
+    assert abs(sa - sb) < 0.2  # slopes should be close regardless of sampling rate
+
+
+@pytest.mark.parametrize("nc, nt", [(-1, 100), (0, 100), (2, 0), (2, -10)])
+def test_invalid_sizes_raise(nc, nt):
+    with pytest.raises(ValueError):
+        _ = generate_1_over_f_noise(nc, nt, exponent=1.0, random_state=0)

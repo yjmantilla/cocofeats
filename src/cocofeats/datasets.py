@@ -288,45 +288,103 @@ def make_dummy_dataset(
                                 replace_brainvision_filename(out_fpath, parts[-1])
 
 
-def generate_1_over_f_noise(n_channels, n_times, exponent=1.0, random_state=None):
-    """Generate 1/f noise (pink noise) for MNE Raw data.
+def generate_1_over_f_noise(
+    n_channels: int,
+    n_times: int,
+    exponent: float = 1.0,
+    *,
+    sfreq: float = 1.0,
+    random_state: int | np.random.Generator | None = None,
+) -> np.ndarray:
+    """
+    Generate 1/f^alpha (pink-like) noise, suitable for synthetic EEG/MEG channels.
+
+    The noise is produced by scaling the real FFT of white noise by ``1 / f**exponent``
+    (with the DC bin set to 0), then transforming back to the time domain. Each channel
+    is z-scored (zero mean, unit variance).
+
     Parameters
     ----------
     n_channels : int
-        Number of channels to generate noise for.
+        Number of channels to generate.
     n_times : int
-        Number of time points for each channel.
+        Number of time samples per channel.
     exponent : float, optional
-        Exponent for the 1/f noise. Default is 1.0.
-    random_state : int, optional
-        Random seed for reproducibility. Default is None.
+        Spectral exponent :math:`\\alpha` in :math:`1/f^{\\alpha}`. Use 1.0 for
+        “pink” noise, 0.0 for white, 2.0 for Brownian-like, etc. Default is 1.0.
+    sfreq : float, optional
+        Sampling frequency in Hz (used only to compute the frequency axis).
+        Default is 1.0 (unit sampling).
+    random_state : int | numpy.random.Generator, optional
+        Seed or generator for reproducibility. If ``None``, a new Generator is used.
+
     Returns
     -------
     np.ndarray
-        Generated pink noise with shape (n_channels, n_times).
+        Array of shape ``(n_channels, n_times)`` containing 1/f^alpha noise,
+        z-scored independently per channel.
+
+    Notes
+    -----
+    - The DC component (0 Hz) is set to 0 before inverse FFT to avoid a large
+      offset when ``exponent > 0``.
+    - Each channel is standardized: ``(x - mean) / std``. If a channel has zero
+      variance (rare with random inputs), its standard deviation is clamped with
+      a tiny epsilon to avoid division-by-zero.
+    - The exact amplitude distribution is Gaussian per time point after z-scoring,
+      but the spectrum follows the targeted 1/f^alpha profile in expectation.
+
+    Examples
+    --------
+    >>> x = generate_1_over_f_noise(3, 10000, exponent=1.0, sfreq=250, random_state=0)
+    >>> x.shape
+    (3, 10000)
+    >>> np.allclose(x.mean(axis=1), 0.0, atol=1e-2)
+    True
+    >>> np.allclose(x.std(axis=1), 1.0, atol=1e-2)
+    True
     """
-    rng = np.random.default_rng(random_state)
-    noise = np.zeros((n_channels, n_times))
+    if n_channels <= 0 or n_times <= 0:
+        raise ValueError("n_channels and n_times must be positive integers.")
 
-    freqs = np.fft.rfftfreq(n_times, d=1.0)  # d=1.0 assumes unit sampling rate
-    freqs[0] = freqs[1]  # avoid division by zero at DC
+    # RNG
+    rng = (
+        random_state
+        if isinstance(random_state, np.random.Generator)
+        else np.random.default_rng(random_state)
+    )
 
-    scale = 1.0 / np.power(freqs, exponent)
+    # White noise: (n_channels, n_times)
+    white = rng.standard_normal((n_channels, n_times))
 
-    for ch in range(n_channels):
-        # Generate white noise in time domain
-        white = rng.standard_normal(n_times)
-        # Transform to frequency domain
-        white_fft = np.fft.rfft(white)
-        # Apply 1/f scaling
-        pink_fft = white_fft * scale
-        # Transform back to time domain
-        pink = np.fft.irfft(pink_fft, n=n_times)
-        # Normalize to zero mean, unit variance
-        pink = (pink - pink.mean()) / pink.std()
-        noise[ch, :] = pink
+    # Frequency axis for rFFT (spacing d = 1/sfreq)
+    # rfftfreq length is n_times//2 + 1
+    freqs = np.fft.rfftfreq(n_times, d=1.0 / float(sfreq))
 
-    return noise
+    # 1 / f^exponent scaling; set DC scale to 0 to avoid blow-up
+    scale = np.empty_like(freqs, dtype=float)
+    scale[0] = 0.0
+    if exponent == 0.0:
+        # No scaling (white); DC already zeroed.
+        scale[1:] = 1.0
+    else:
+        # Avoid division by zero at DC (already set); scale others.
+        scale[1:] = 1.0 / np.power(
+            freqs[1:], exponent / 2.0
+        )  # divide by 2 because power is squared amplitude
+
+    # FFT along time axis, apply scale, and invert
+    white_fft = np.fft.rfft(white, axis=-1)
+    pink_fft = white_fft * scale[None, :]
+    pink = np.fft.irfft(pink_fft, n=n_times, axis=-1)
+
+    # Standardize per channel (mean 0, std 1) with epsilon guard
+    pink -= pink.mean(axis=1, keepdims=True)
+    std = pink.std(axis=1, keepdims=True)
+    eps = 1e-12
+    pink /= std + eps
+
+    return pink
 
 
 def get_dummy_raw(
