@@ -32,6 +32,14 @@ pytest -s -q --no-cov --pdb
 
 # Build docs
 sphinx-build -b html docs docs/_build/html -W --keep-going
+
+# Clean docs
+sphinx-build -M clean docs docs/_build/html
+
+or
+
+rm -rf docs/_build
+
 ```
 
 ## Documentation
