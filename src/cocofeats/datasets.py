@@ -10,10 +10,11 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import mne
 import numpy as np
-from mne_bids.write import _write_raw_brainvision
+from mne.export import export_raw
 
 from cocofeats.utils import get_num_digits
 
@@ -486,33 +487,72 @@ def get_dummy_raw(
     return raw, new_events
 
 
-def save_dummy_vhdr(fpath, dummy_args=None):
+def save_dummy_vhdr(fpath: PathLike, dummy_args: dict[str, Any] | None = None) -> list[Path] | None:
     """
-    Save a dummy vhdr file.
+    Save a dummy BrainVision header (``.vhdr``) plus its companion files (``.vmrk``, ``.eeg``).
+
+    This function generates a synthetic :class:`mne.io.Raw` via :func:`get_dummy_raw`,
+    then writes a BrainVision set using :func:`mne.export.export_raw`. If writing
+    succeeds and all three files exist, their paths are returned; otherwise ``None`` is returned.
 
     Parameters
     ----------
-    fpath : str, required
-        Path where to save the file.
-    kwargs : dict, optional
-        Dictionary with the arguments of the get_dummy_raw function.
+    fpath : path-like
+        Target path for the header file. If it does not end with ``.vhdr``,
+        the ``.vhdr`` suffix is appended automatically.
+    dummy_args : dict, optional
+        Keyword arguments forwarded to :func:`get_dummy_raw` (e.g., ``NCHANNELS``,
+        ``SFREQ``, ``STOP``, ``NUMEVENTS``, ``random_state``). If ``None``,
+        sensible defaults from :func:`get_dummy_raw` are used.
 
     Returns
     -------
-    List with the Paths of the desired vhdr file, if those were succesfully created,
-    None otherwise.
+    list of pathlib.Path or None
+        A list ``[vhdr_path, eeg_path, vmrk_path]`` if all files are successfully
+        created; otherwise ``None``.
+
+    Notes
+    -----
+    - The parent directory of ``fpath`` is created if it does not exist.
+    - Uses the public API :func:`mne.export.export_raw` with ``fmt="brainvision"``.
+      Depending on your MNE version, additional keyword arguments may be available.
+
+    Examples
+    --------
+    >>> paths = save_dummy_vhdr("out/session01.vhdr", {"NCHANNELS": 4, "SFREQ": 250.0, "STOP": 2.0})
+    >>> paths[0].suffix
+    '.vhdr'
     """
+    # Normalize and ensure .vhdr suffix
+    vhdr_path = Path(fpath)
+    if vhdr_path.suffix.lower() != ".vhdr":
+        vhdr_path = vhdr_path.with_suffix(".vhdr")
+    vhdr_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Build dummy Raw + events
     if dummy_args is None:
         dummy_args = {}
+    raw, events = get_dummy_raw(**dummy_args)
 
-    raw, new_events = get_dummy_raw(**dummy_args)
-    _write_raw_brainvision(raw, fpath, new_events, overwrite=True)
-    eegpath = fpath.replace(".vhdr", ".eeg")
-    vmrkpath = fpath.replace(".vhdr", ".vmrk")
-    if all(os.path.isfile(x) for x in [fpath, eegpath, vmrkpath]):
-        return [fpath, eegpath, vmrkpath]
-    else:
-        return None
+    # Attach events as annotations so export_raw will write them to .vmrk
+    if events is not None and len(events):
+        anns = mne.annotations_from_events(
+            events=events,
+            sfreq=raw.info["sfreq"],
+            event_desc=None,  # default: string version of event IDs
+        )
+        raw = raw.set_annotations(anns)
+
+    # Write BrainVision trio via public exporter
+    # Note: export_raw determines companion .vmrk/.eeg files from the .vhdr basename
+    export_raw(fname=str(vhdr_path), raw=raw, fmt="brainvision", overwrite=True)
+
+    eeg_path = vhdr_path.with_suffix(".eeg")
+    vmrk_path = vhdr_path.with_suffix(".vmrk")
+
+    if all(p.exists() for p in (vhdr_path, eeg_path, vmrk_path)):
+        return [vhdr_path, eeg_path, vmrk_path]
+    return None
 
 
 def generate_dummy_dataset(data_params=None):

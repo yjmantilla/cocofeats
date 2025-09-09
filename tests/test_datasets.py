@@ -1,15 +1,18 @@
 # Tests for cocofeats.datasets module
+from __future__ import annotations
 import os
 import numpy as np
 from pathlib import Path
 import pytest
 import mne
+import re
 
 from cocofeats.datasets import (
     replace_brainvision_filename,
     make_dummy_dataset,
     generate_1_over_f_noise,
     get_dummy_raw,
+    save_dummy_vhdr,
 )
 
 
@@ -557,3 +560,81 @@ def test_numevents_exceeds_samples_raises():
     # n_times = round(10 * 0.5) = 5; request 6 events → error
     with pytest.raises(ValueError):
         _ = get_dummy_raw(NCHANNELS=1, SFREQ=10.0, STOP=0.5, NUMEVENTS=6, random_state=0)
+
+
+# Tests for save_dummy_vhdr function
+
+
+def _read_text(p: Path) -> str:
+    return p.read_text(encoding="utf-8", errors="ignore")
+
+
+def test_save_dummy_vhdr_creates_trio(tmp_path: Path):
+    out = tmp_path / "sub-01" / "ses-01" / "rec01.vhdr"
+    paths = save_dummy_vhdr(
+        out, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 1.0, "NUMEVENTS": 4}
+    )
+
+    assert isinstance(paths, list) and len(paths) == 3
+    vhdr_path, eeg_path, vmrk_path = paths
+    assert vhdr_path.exists()
+    assert eeg_path.exists()
+    assert vmrk_path.exists()
+
+    # Suffixes
+    assert vhdr_path.suffix.lower() == ".vhdr"
+    assert eeg_path.suffix.lower() == ".eeg"
+    assert vmrk_path.suffix.lower() == ".vmrk"
+
+
+def test_suffix_added_and_parent_created(tmp_path: Path):
+    # Provide path without .vhdr and nested folder; function must create parent and add .vhdr
+    out = tmp_path / "nested" / "deeper" / "myrecording"
+    paths = save_dummy_vhdr(
+        out, dummy_args={"NCHANNELS": 1, "SFREQ": 100.0, "STOP": 0.5, "NUMEVENTS": 2}
+    )
+
+    vhdr_path, eeg_path, vmrk_path = paths
+    assert vhdr_path.suffix.lower() == ".vhdr"
+    assert vhdr_path.parent.exists()
+    # All three files should exist
+    for p in (vhdr_path, eeg_path, vmrk_path):
+        assert p.exists()
+
+
+def test_header_references_match_basename(tmp_path: Path):
+    out = tmp_path / "rec2.vhdr"
+    paths = save_dummy_vhdr(
+        out, dummy_args={"NCHANNELS": 2, "SFREQ": 120.0, "STOP": 1.0, "NUMEVENTS": 5}
+    )
+    vhdr_path, eeg_path, vmrk_path = paths
+
+    base = vhdr_path.with_suffix("")  # same base for trio
+    base_name = base.name
+
+    txt = _read_text(vhdr_path)
+
+    # Look for DataFile= and MarkerFile= lines referencing the generated base name
+    # Accept possible capitalization differences in keys.
+    datafile_ok = re.search(
+        rf"^\s*DataFile\s*=\s*{re.escape(base_name)}\.eeg\s*$",
+        txt,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+    markerfile_ok = re.search(
+        rf"^\s*MarkerFile\s*=\s*{re.escape(base_name)}\.vmrk\s*$",
+        txt,
+        flags=re.IGNORECASE | re.MULTILINE,
+    )
+
+    assert datafile_ok, "DataFile line not found or incorrect in .vhdr"
+    assert markerfile_ok, "MarkerFile line not found or incorrect in .vhdr"
+
+
+def test_returns_three_paths_of_type_pathlib_path(tmp_path: Path):
+    out = tmp_path / "abc.vhdr"
+    paths = save_dummy_vhdr(
+        out, dummy_args={"NCHANNELS": 1, "SFREQ": 64.0, "STOP": 1.0, "NUMEVENTS": 3}
+    )
+    assert all(isinstance(p, Path) for p in paths)
+    assert {p.suffix.lower() for p in paths} == {".vhdr", ".vmrk", ".eeg"}
