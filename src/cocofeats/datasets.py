@@ -16,9 +16,42 @@ import mne
 import numpy as np
 from mne.export import export_raw
 
-from cocofeats.utils import get_num_digits
-
+from cocofeats.utils import get_num_digits, get_path
+from cocofeats.loaders import load_yaml_configuration
 PathLike = str | os.PathLike
+
+
+def get_datasets_and_mount_point_from_pipeline_configuration(
+        pipeline_input: dict[str, Any] | PathLike,
+    ) -> dict[str, Any]:
+    """
+    Load the pipeline configuration and return the datasets section and mount point.
+    Parameters
+    ----------
+    pipeline_input : dict or path-like
+        Pipeline configuration as a dictionary or a path to a YAML file.
+    Returns
+    -------
+    datasets : dict
+        The datasets section of the pipeline configuration.
+    mount_point : str or None
+        The mount point if specified, otherwise None.
+    Raises
+    ------
+    ValueError
+        If the datasets section is missing or invalid.
+    """
+    pipeline_config = load_yaml_configuration(pipeline_input)
+    mount_point = pipeline_config.get("mount_point", None)
+    datasets = pipeline_config.get("datasets", None)
+    if datasets is None:
+        raise ValueError("No 'datasets' section found in the pipeline configuration.")
+    if isinstance(datasets, str) or isinstance(datasets, os.PathLike):
+        datasets_path = get_path(datasets, mount_point=mount_point)
+        datasets = load_yaml_configuration(datasets_path)
+    elif not isinstance(datasets, dict):
+        raise ValueError("'datasets' section must be a dict or a path to a YAML file.")
+    return datasets, mount_point
 
 
 def replace_brainvision_filename(fpath: PathLike, newname: str) -> None:
@@ -622,24 +655,25 @@ def generate_dummy_dataset(data_params: dict[str, Any] | None = None) -> None:
     default_root = test_root / f"{dataset_name}_SOURCE"
     root = Path(params.get("ROOT", default_root))
 
-    # If EXAMPLE not provided, create a BrainVision trio to replicate
+    # If EXAMPLE not provided, create a BrainVision trio to replicate on a tempfile
     example = params.get("EXAMPLE", None)
-    if example is None:
-        template_vhdr = test_root / f"{dataset_name}_template.vhdr"
-        template_vhdr.parent.mkdir(parents=True, exist_ok=True)
-        trio = save_dummy_vhdr(
-            template_vhdr, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 1.0, "NUMEVENTS": 4}
-        )
-        if not trio:
-            raise RuntimeError("Failed to create example BrainVision files for dummy dataset.")
-        example = trio  # list[Path]
-        params["EXAMPLE"] = example
 
-    # Prepare output root (clean then create)
-    if root.exists():
-        shutil.rmtree(root)
-    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as td:
+        if example is None:
+            tmp_vhdr = Path(td) / f"{dataset_name}_template.vhdr"
+            trio = save_dummy_vhdr(
+                tmp_vhdr, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 1.0, "NUMEVENTS": 4}
+            )
+            if not trio:
+                raise RuntimeError("Failed to create example BrainVision files for dummy dataset.")
+            example = trio[0] # use the .vhdr; make_dummy_dataset will copy all trio files
+            params["EXAMPLE"] = example
 
-    # Forward to make_dummy_dataset with our resolved ROOT
-    params["ROOT"] = root
-    make_dummy_dataset(**params)
+        # Prepare output root (clean then create)
+        if root.exists():
+            shutil.rmtree(root)
+        root.mkdir(parents=True, exist_ok=True)
+
+        # Forward to make_dummy_dataset with our resolved ROOT
+        params["ROOT"] = root
+        make_dummy_dataset(**params)
