@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import IO, Any
-
+from typing import Any
+from collections.abc import Mapping
 import yaml
 
 from cocofeats.loggers import get_logger
+from cocofeats.definitions import RulesLike
 
 log = get_logger(__name__)
 
@@ -50,11 +50,9 @@ class UniqueKeySafeLoader(_BaseSafeLoader):
         return super().construct_mapping(node, deep=deep)
 
 
-Pathish = str | os.PathLike[str]
-RulesLike = Mapping[str, Any] | Pathish | IO[str]
 
 
-def load_yaml_configuration(rules: RulesLike) -> dict[str, Any]:
+def load_configuration(rules: RulesLike) -> dict[str, Any]:
     """
     Load a rules dictionary from:
       - a mapping (returned deep-copied),
