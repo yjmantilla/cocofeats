@@ -5,13 +5,11 @@ import posixpath
 from collections.abc import Sequence
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
+from cocofeats.definitions import PathLike
 
 from cocofeats.loggers import get_logger
 
 log = get_logger(__name__)
-
-PathLike = str | os.PathLike
-
 
 def get_num_digits(n: int, method: Literal["safe", "fast"] = "safe") -> int:
     """Return the number of decimal digits in an integer.
