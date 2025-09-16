@@ -63,16 +63,16 @@ def get_num_digits(n: int, method: Literal["safe", "fast"] = "safe") -> int:
     raise ValueError(f"Unknown method: {method!r}. Use 'safe' or 'fast'.")
 
 
-def get_path(path: str | dict[str, str], mount: str | None = None) -> str:
+def get_path(path: str | dict[str, str], mount_point: str | None = None) -> str:
     """
-    Retrieve the resolved path based on a given mount key or return the path directly.
+    Retrieve the resolved path based on a given mount_point key or return the path directly.
 
     Parameters
     ----------
     path : str or dict of str
-        A file path string or a dictionary mapping mount names to paths.
-    mount : str, optional
-        The mount key to use if ``path`` is a dictionary. If None or if ``path``
+        A file path string or a dictionary mapping mount_point names to paths.
+    mount_point : str, optional
+        The mount_point key to use if ``path`` is a dictionary. If None or if ``path``
         is not a dictionary, the function returns ``path`` directly.
 
     Returns
@@ -83,7 +83,7 @@ def get_path(path: str | dict[str, str], mount: str | None = None) -> str:
     Raises
     ------
     KeyError
-        If ``mount`` is provided but not found in the dictionary ``path``.
+        If ``mount_point`` is provided but not found in the dictionary ``path``.
 
     Examples
     --------
@@ -91,17 +91,17 @@ def get_path(path: str | dict[str, str], mount: str | None = None) -> str:
     '/data/files'
 
     >>> paths = {"local": "/mnt/local/data", "remote": "/mnt/remote/data"}
-    >>> get_path(paths, mount="local")
+    >>> get_path(paths, mount_point="local")
     '/mnt/local/data'
     """
-    log.debug("get_path: called", mount=mount, path_type=type(path).__name__)
-    if isinstance(path, dict) and mount is not None:
+    log.debug("get_path: called", mount_point=mount_point, path_type=type(path).__name__)
+    if isinstance(path, dict) and mount_point is not None:
         try:
-            resolved = path[mount]
-            log.debug("get_path: resolved via mount", mount=mount, resolved=resolved)
+            resolved = path[mount_point]
+            log.debug("get_path: resolved via mount_point", mount_point=mount_point, resolved=resolved)
             return resolved
         except KeyError:
-            log.debug("get_path: missing mount key", mount=mount, available=list(path.keys()))
+            log.debug("get_path: missing mount_point key", mount_point=mount_point, available=list(path.keys()))
             raise
     log.debug("get_path: returning direct path", path=path)
     return path
