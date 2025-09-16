@@ -11,14 +11,16 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
+from cocofeats.definitions import PathLike
 
 import mne
 import numpy as np
 from mne.export import export_raw
 
 from cocofeats.utils import get_num_digits, get_path
-from cocofeats.loaders import load_yaml_configuration
-PathLike = str | os.PathLike
+from cocofeats.loaders import load_configuration
+from cocofeats.definitions import DatasetConfig
+
 
 
 def get_datasets_and_mount_point_from_pipeline_configuration(
@@ -41,16 +43,21 @@ def get_datasets_and_mount_point_from_pipeline_configuration(
     ValueError
         If the datasets section is missing or invalid.
     """
-    pipeline_config = load_yaml_configuration(pipeline_input)
+    pipeline_config = load_configuration(pipeline_input)
     mount_point = pipeline_config.get("mount_point", None)
     datasets = pipeline_config.get("datasets", None)
     if datasets is None:
         raise ValueError("No 'datasets' section found in the pipeline configuration.")
     if isinstance(datasets, str) or isinstance(datasets, os.PathLike):
         datasets_path = get_path(datasets, mount_point=mount_point)
-        datasets = load_yaml_configuration(datasets_path)
+        datasets = load_configuration(datasets_path)
     elif not isinstance(datasets, dict):
         raise ValueError("'datasets' section must be a dict or a path to a YAML file.")
+    
+    # At this point, datasets should be a dict
+    # Make them into DatasetConfig instances
+    datasets = {name: DatasetConfig(**cfg) for name, cfg in datasets.items()}
+
     return datasets, mount_point
 
 

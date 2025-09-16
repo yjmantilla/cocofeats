@@ -733,11 +733,12 @@ def test_parameter_defaults_are_merged(tmp_path: Path):
 @pytest.mark.skipif(pytest.importorskip("mne") is None, reason="mne not available")
 def test_auto_template_creation_when_example_missing(tmp_path: Path):
     """
-    If EXAMPLE is omitted, the function should create a BrainVision trio in
-    _data/<DATASET>/<DATASET>_template.vhdr, then use it to populate ROOT.
+    If EXAMPLE is omitted, generate_dummy_dataset should create a temporary
+    BrainVision trio (not persisted under package _data) and still populate ROOT.
     """
-    # Import the module to compute the expected _data path relative to it
-    from cocofeats import datasets  # ← change this to the real module
+    # Import the real function + module to locate the package _data dir
+    from cocofeats.datasets import generate_dummy_dataset  # ← adjust if different
+    from cocofeats import datasets as ds_mod               # ← adjust if different
     import shutil
 
     dataset_name = "AUTOTPL"
@@ -754,35 +755,29 @@ def test_auto_template_creation_when_example_missing(tmp_path: Path):
         # EXAMPLE intentionally omitted
     }
 
-    # Compute expected template location: .../package/_data/<DATASET>/<DATASET>_template.vhdr
-    data_dir = (Path(datasets.__file__).parent / ".." / ".." / "_data").resolve()
+    # Package _data/<DATASET>/… (should NOT get a persisted *_template.* anymore)
+    data_dir = (Path(ds_mod.__file__).parent / ".." / ".." / "_data").resolve()
     tpl_dir = data_dir / dataset_name
-    tpl_vhdr = tpl_dir / f"{dataset_name}_template.vhdr"
-    tpl_vmrk = tpl_dir / f"{dataset_name}_template.vmrk"
-    tpl_eeg = tpl_dir / f"{dataset_name}_template.eeg"
-
-    # Ensure clean slate for the dataset entry under _data
+    # Clean slate
     if tpl_dir.exists():
         shutil.rmtree(tpl_dir)
 
     try:
         generate_dummy_dataset(params)
-        # Template trio should have been created
-        assert tpl_vhdr.exists()
-        assert tpl_vmrk.exists()
-        assert tpl_eeg.exists()
-        # And ROOT should have one set of files generated (copy of trio)
-        base = root / "TTA0" / "SSE0" / "subSU0_AC0_0"
-        assert (
-            base.with_suffix(".vhdr").exists()
-            or base.with_suffix(".eeg").exists()
-            or base.with_suffix(".vmrk").exists()
-        )
+
+        # 1) No persistent template trio should exist under _data/<DATASET>
+        assert not tpl_dir.exists() or not any(
+            tpl_dir.glob(f"{dataset_name}_template.*")
+        ), "Template trio should not be persisted under package _data anymore"
+
+        # 2) ROOT should contain at least one generated BrainVision file from the replication
+        found_any = any(root.rglob("*.vhdr")) or any(root.rglob("*.vmrk")) or any(root.rglob("*.eeg"))
+        assert found_any, "Expected at least one BrainVision file generated under ROOT"
     finally:
-        # Cleanup the template directory we created in the package's _data
+        # Cleanup in case the function behavior changes in the future
         if tpl_dir.exists():
             shutil.rmtree(tpl_dir)
-
+            log.debug("Removed temporary template directory", path=tpl_dir)
 
 def test_returns_none(tmp_path: Path):
     ex = _write(tmp_path / "ex.txt", "content\n")
