@@ -152,3 +152,24 @@ def test_env_overrides_force_json(monkeypatch, capsys):
 def test_invalid_level_raises():
     with pytest.raises(ValueError):
         logmod._coerce_level("NOT_A_LEVEL")
+
+
+def test_coerce_level_int_passthrough():
+    # Should return the int unchanged
+    assert logmod._coerce_level(logging.DEBUG) == logging.DEBUG
+    assert logmod._coerce_level(42) == 42
+
+
+def test_configure_logging_level_none_defaults_env(monkeypatch, capsys):
+    # Simulate LOG_LEVEL=DEBUG in environment
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+    monkeypatch.setattr(sys.stdout, "isatty", lambda: False, raising=False)
+
+    configure_logging(level=None)  # should read from env
+    get_logger("envtest").debug("debugmsg", val=123)
+
+    out = _stdout_text(capsys)
+    data = _last_json_line(out)
+    assert data["event"] == "debugmsg"
+    assert data["val"] == 123
+    assert str(data["level"]).lower() == "debug"
