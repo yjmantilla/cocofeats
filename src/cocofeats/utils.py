@@ -110,28 +110,49 @@ def replace_bids_suffix(path: PathLike, new_suffix: str, new_ext: str) -> Path:
     """
     Replace the suffix and extension of a BIDS-like filename.
 
-    Args:
-        path: original file path (str or PathLike).
-        new_suffix: new suffix (without leading underscore).
-        new_ext: new extension (with leading dot, e.g. ".json" or ".nii.gz").
+    Parameters
+    ----------
+    path : PathLike
+        Original file path (``str`` or ``os.PathLike``).
+    new_suffix : str
+        New suffix (without leading underscore).
+    new_ext : str
+        New extension. Can handle multi-part extensions (e.g. ``".nii.gz"``). 
+        Must include the leading dot.
 
-    Returns:
-        Path with replaced suffix and extension.
+    Returns
+    -------
+    Path
+        Path object with replaced suffix and extension.
+
+    Notes
+    -----
+    - Handles multi-part extensions (e.g., ``.nii.gz``).
+    - Splits on the last underscore to isolate suffix **only if the file already
+      has an extension**. If no extension is present, keeps the full name.
     """
     path = Path(path)
+    log.debug("Received path for suffix replacement", path=str(path))
+
     stem = path.name
-
-    # Handle multi-part extensions like .nii.gz
-    exts = "".join(path.suffixes)   # ".nii.gz"
+    exts = "".join(path.suffixes)   # ".nii.gz" or ""
     base = stem[: -len(exts)] if exts else stem
+    log.debug("Split stem into base and exts", base=base, exts=exts)
 
-    # Split on last underscore to isolate suffix
-    if "_" in base:
+    prefix = base
+    if exts and "_" in base:
         prefix, _ = base.rsplit("_", 1)
+        log.debug("Detected existing suffix, isolating prefix", prefix=prefix)
+    elif not exts and "_" in base:
+        log.info("No extension present, keeping full base as prefix", prefix=prefix)
     else:
-        prefix = base  # fallback if no suffix
+        log.debug("No underscore found, using full base", prefix=prefix)
 
-    return path.with_name(f"{prefix}_{new_suffix}{new_ext}")
+    new_name = f"{prefix}_{new_suffix}{new_ext}"
+    log.debug("Constructed new filename", new_name=new_name)
+
+    return path.with_name(new_name)
+
 
 def find_unique_root(
     filepaths: Sequence[PathLike],

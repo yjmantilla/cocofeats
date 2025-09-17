@@ -1,11 +1,11 @@
 # tests/test_get_num_digits.py
 import pytest
 import os
-from cocofeats.utils import get_num_digits, get_path, find_unique_root
+from cocofeats.utils import get_num_digits, get_path, find_unique_root, replace_bids_suffix
 import ntpath
 import posixpath
 from pathlib import PureWindowsPath, PurePosixPath
-
+from pathlib import Path
 
 # Tests for get_num_digits function
 
@@ -246,6 +246,121 @@ def test_minimal_unique_root_windows_like_paths(filepaths):
     if parent is not None:
         assert not _has_unique_relpaths(parent, filepaths)
 
+
+# --- Error conditions ---
+
+def test_empty_input_raises():
+    with pytest.raises(ValueError, match="filepaths must be non-empty"):
+        find_unique_root([])
+
+
+def test_mixed_styles_strict_rejects():
+    # One POSIX, one Windows → should raise with strict=True
+    filepaths = ["/data/x.txt", "C:\\data\\y.txt"]
+    with pytest.raises(ValueError, match="Mixed POSIX/Windows styles"):
+        find_unique_root(filepaths, style="auto", strict=True)
+
+
+def test_invalid_style():
+    with pytest.raises(ValueError, match="style must be 'auto'"):
+        find_unique_root(["/data/x.txt"], style="bogus")
+
+
+def test_backslash_in_posix_strict_raises():
+    # Backslash in POSIX path with strict=True
+    filepaths = ["/data\\bad.txt"]
+    with pytest.raises(ValueError, match="Backslash found in POSIX path"):
+        find_unique_root(filepaths, style="posix", strict=True)
+
+
+def test_invalid_mode():
+    with pytest.raises(ValueError, match="mode must be 'minimal' or 'maximal'"):
+        find_unique_root(["/data/x.txt"], mode="wrong")
+
+
+# --- Explicit style selection ---
+
+def test_explicit_windows_style(monkeypatch):
+    # Even if POSIX-looking, force Windows behavior
+    filepaths = ["C:\\proj\\a.txt", "C:\\proj\\b.txt"]
+    root = find_unique_root(filepaths, style="windows")
+    assert root.lower().startswith("c:\\"), f"Got {root} instead of C:\\..."
+
+
+def test_explicit_posix_style():
+    filepaths = ["/a/b/file1.txt", "/a/b/file2.txt"]
+    root = find_unique_root(filepaths, style="posix")
+    # Minimal unique root can be "/" since relpaths are still unique there
+    assert root in ["/", "/a/b"]
+
+
+# --- Lenient coercion ---
+
+def test_lenient_mixed_styles_coerces_to_windows():
+    filepaths = ["/data/x.txt", "C:\\data\\y.txt"]
+    root = find_unique_root(filepaths, style="auto", strict=False)
+    # Different drives → no common root, function falls back to ""
+    assert root == ""
+
+
+def test_lenient_backslash_coerced_to_slash():
+    filepaths = ["/data\\x.txt", "/data\\y.txt"]
+    root = find_unique_root(filepaths, style="posix", strict=False)
+    # Minimal root is "/" since relpaths are unique from root
+    assert root == "/"
+
+# --- Edge: different drives on Windows → no common path ---
+
+def test_different_drives_windows_no_common(monkeypatch):
+    filepaths = ["C:\\a\\x.txt", "D:\\b\\y.txt"]
+    root = find_unique_root(filepaths, style="windows")
+    # Expected fallback: no common prefix → empty string
+    assert root == ""
+
+
+# --- Maximal mode ---
+
+def test_maximal_mode_returns_deepest():
+    filepaths = ["/data/project1/a.txt", "/data/project2/b.txt"]
+    root_min = find_unique_root(filepaths, mode="minimal")
+    root_max = find_unique_root(filepaths, mode="maximal")
+    # Minimal should be "/" and maximal should be "/data"
+    assert root_min == "/"
+    assert root_max == "/data"
+    assert root_max != root_min
+
+# Replace BIDS suffix tests
+
+@pytest.mark.parametrize(
+    "input_path,new_suffix,new_ext,expected",
+    [
+        # Case with underscore and multi-part extension
+        ("sub-01_task-rest_bold.nii.gz", "desc-preproc", ".nii.gz", "sub-01_task-rest_desc-preproc.nii.gz"),
+        # Case with single extension
+        ("sub-02_eeg.set", "clean", ".fdt", "sub-02_clean.fdt"),
+        # No underscore in base
+        ("dataset.json", "metadata", ".json", "dataset_metadata.json"),
+        # No extension at all
+        ("file_without_ext", "suffix", ".txt", "file_without_ext_suffix.txt"),
+    ],
+)
+
+def test_replace_bids_suffix(input_path, new_suffix, new_ext, expected):
+    result = replace_bids_suffix(input_path, new_suffix, new_ext)
+    assert isinstance(result, Path)
+    assert result.name == expected, f"Failed for input: {input_path}. Result: {result.name}, Expected: {expected}"
+
+
+def test_handles_multiparts():
+    path = "sub-03_ses-01_bold.nii.gz"
+    result = replace_bids_suffix(path, "desc-cleaned", ".nii.gz")
+    assert result.name == "sub-03_ses-01_desc-cleaned.nii.gz"
+
+
+def test_no_suffix():
+    path = "plainfile"
+    result = replace_bids_suffix(path, "extra", ".json")
+    assert result.name == "plainfile_extra.json"
 
 if __name__ == "__main__":
     # pytest.main([__file__])
