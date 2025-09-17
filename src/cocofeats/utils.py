@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
 from cocofeats.definitions import PathLike
+from pathlib import Path
 
 from cocofeats.loggers import get_logger
 
@@ -105,14 +106,42 @@ def get_path(path: str | dict[str, str], mount_point: str | None = None) -> str:
     return path
 
 
-def find_minimal_unique_root(
+def replace_bids_suffix(path: PathLike, new_suffix: str, new_ext: str) -> Path:
+    """
+    Replace the suffix and extension of a BIDS-like filename.
+
+    Args:
+        path: original file path (str or PathLike).
+        new_suffix: new suffix (without leading underscore).
+        new_ext: new extension (with leading dot, e.g. ".json" or ".nii.gz").
+
+    Returns:
+        Path with replaced suffix and extension.
+    """
+    path = Path(path)
+    stem = path.name
+
+    # Handle multi-part extensions like .nii.gz
+    exts = "".join(path.suffixes)   # ".nii.gz"
+    base = stem[: -len(exts)] if exts else stem
+
+    # Split on last underscore to isolate suffix
+    if "_" in base:
+        prefix, _ = base.rsplit("_", 1)
+    else:
+        prefix = base  # fallback if no suffix
+
+    return path.with_name(f"{prefix}_{new_suffix}{new_ext}")
+
+def find_unique_root(
     filepaths: Sequence[PathLike],
     *,
-    style: str = "auto",  # {'auto','posix','windows'}
-    strict: bool = True,  # if True, reject ambiguous/mixed inputs
+    style: str = "auto",   # {'auto','posix','windows'}
+    strict: bool = True,   # if True, reject ambiguous/mixed inputs
+    mode: str = "minimal", # {'minimal','maximal'}
 ) -> str:
     """
-    Find the shallowest root such that relative paths from it are unique.
+    Find the shallowest or deepest root such that relative paths from it are unique.
 
     Parameters
     ----------
@@ -128,22 +157,27 @@ def find_minimal_unique_root(
         If False, coerce separators:
         - Windows: convert ``/`` → ``\\``
         - POSIX: convert ``\\`` → ``/``
+    mode : {'minimal', 'maximal'}, optional
+        - 'minimal': return the shallowest root that ensures unique relpaths.
+        - 'maximal': return the deepest such root.
+
     Returns
     -------
     str
-        Normalized minimal root path as a string.
+        Normalized root path as a string.
 
     Raises
     ------
     ValueError
-        If filepaths is empty, or styles are mixed with strict=True.
+        If filepaths is empty, styles are mixed with strict=True,
+        or mode is invalid.
     """
     if not filepaths:
-        log.debug("find_minimal_unique_root: empty input")
+        log.debug("find_unique_root: empty input")
         raise ValueError("filepaths must be non-empty")
 
     raw = [os.fspath(p) for p in filepaths]
-    log.debug("find_minimal_unique_root: called", n_paths=len(raw), style=style, strict=strict)
+    log.debug("find_unique_root: called", n_paths=len(raw), style=style, strict=strict, mode=mode)
 
     def looks_windows(s: str) -> bool:
         # Drive letter or backslash suggests Windows intent
@@ -154,25 +188,25 @@ def find_minimal_unique_root(
         flags = [looks_windows(s) for s in raw]
         if any(flags) and not all(flags):
             if strict:
-                log.debug("find_minimal_unique_root: mixed styles rejected (strict=True)")
+                log.debug("find_unique_root: mixed styles rejected (strict=True)")
                 raise ValueError("Mixed POSIX/Windows styles are not supported (strict=True).")
             # Lenient: pick windows if any looks windows
             use_windows = True
-            log.debug("find_minimal_unique_root: mixed styles coerced to windows (lenient)")
+            log.debug("find_unique_root: mixed styles coerced to windows (lenient)")
         else:
             use_windows = all(flags)
             log.debug(
-                "find_minimal_unique_root: inferred style",
+                "find_unique_root: inferred style",
                 inferred="windows" if use_windows else "posix",
             )
     elif style == "windows":
         use_windows = True
-        log.debug("find_minimal_unique_root: explicit style", chosen="windows")
+        log.debug("find_unique_root: explicit style", chosen="windows")
     elif style == "posix":
         use_windows = False
-        log.debug("find_minimal_unique_root: explicit style", chosen="posix")
+        log.debug("find_unique_root: explicit style", chosen="posix")
     else:
-        log.debug("find_minimal_unique_root: invalid style", style=style)
+        log.debug("find_unique_root: invalid style", style=style)
         raise ValueError("style must be 'auto', 'posix', or 'windows'.")
 
     # Pick modules/classes per style
@@ -185,7 +219,7 @@ def find_minimal_unique_root(
         if strict:
             if not use_windows and "\\" in s:
                 log.debug(
-                    "find_minimal_unique_root: backslash in POSIX path with strict=True", path=s
+                    "find_unique_root: backslash in POSIX path with strict=True", path=s
                 )
                 raise ValueError(
                     f"Backslash found in POSIX path '{s}' (strict=True). "
@@ -198,12 +232,12 @@ def find_minimal_unique_root(
             else:
                 paths.append(s.replace("\\", "/"))  # treat backslash as separator
     if not strict:
-        log.debug("find_minimal_unique_root: coerced separators", use_windows=use_windows)
+        log.debug("find_unique_root: coerced separators", use_windows=use_windows)
 
     # Normalize with the chosen flavor
     paths = [pmod.normpath(s) for s in paths]
     log.debug(
-        "find_minimal_unique_root: normalized paths sample",
+        "find_unique_root: normalized paths sample",
         sample=paths[:3] if len(paths) > 3 else paths,
     )
 
@@ -213,29 +247,41 @@ def find_minimal_unique_root(
     except ValueError:
         # e.g., different drives on Windows → no common path
         common_prefix = ""
-        log.debug("find_minimal_unique_root: no common path (e.g., different drives)")
+        log.debug("find_unique_root: no common path (e.g., different drives)")
 
     split = [PurePath(s).parts for s in paths]
     prefix_len = len(PurePath(common_prefix).parts)
     log.debug(
-        "find_minimal_unique_root: prefix info", common_prefix=common_prefix, prefix_len=prefix_len
+        "find_unique_root: prefix info", common_prefix=common_prefix, prefix_len=prefix_len
     )
 
-    # Try shallowest→deepest; first that yields unique relpaths wins
+    # Try shallowest→deepest; collect all candidates
+    candidates = []
     for i in range(1, prefix_len + 1):
         rels = []
         for parts in split:
             tail = parts[i:]
             rels.append(pmod.join(*tail) if tail else "")
         unique = len(rels) == len(set(rels))
-        log.debug("find_minimal_unique_root: candidate check", depth=i, unique=unique)
+        log.debug("find_unique_root: candidate check", depth=i, unique=unique)
         if unique:
             head = split[0][:i]
             chosen = pmod.normpath(pmod.join(*head))
-            log.debug("find_minimal_unique_root: selected minimal root", root=chosen, depth=i)
+            candidates.append((i, chosen))
+
+    if candidates:
+        if mode == "minimal":
+            chosen = candidates[0][1]  # shallowest
+            log.debug("find_unique_root: selected minimal root", root=chosen)
             return chosen
+        elif mode == "maximal":
+            chosen = candidates[-1][1] # deepest
+            log.debug("find_unique_root: selected maximal root", root=chosen)
+            return chosen
+        else:
+            raise ValueError("mode must be 'minimal' or 'maximal'")
 
     # Fallback — full common path (may be empty)
     fallback = pmod.normpath(common_prefix) if common_prefix else common_prefix
-    log.debug("find_minimal_unique_root: fallback to common prefix", root=fallback or "(none)")
+    log.debug("find_unique_root: fallback to common prefix", root=fallback or "(none)")
     return fallback

@@ -1,7 +1,7 @@
 # tests/test_get_num_digits.py
 import pytest
 import os
-from cocofeats.utils import get_num_digits, get_path, find_minimal_unique_root
+from cocofeats.utils import get_num_digits, get_path, find_unique_root
 import ntpath
 import posixpath
 from pathlib import PureWindowsPath, PurePosixPath
@@ -99,7 +99,7 @@ def test_returns_dict_when_mount_point_is_none_and_path_is_dict():
     assert get_path(paths, mount_point=None) is paths
 
 
-# Helper functions for testing find_minimal_unique_root
+# Helper functions for testing find_unique_root
 
 
 def _pick_flavor(paths) -> tuple:
@@ -155,7 +155,7 @@ def _parent_dir(path) -> str | None:
     return None if parent == path else parent
 
 
-# Tests for find_minimal_unique_root function
+# Tests for find_unique_root function
 
 
 @pytest.mark.parametrize(
@@ -178,7 +178,7 @@ def test_minimal_unique_root_properties_posix(filepaths, monkeypatch):
     # Precondition: all absolute POSIX-like paths
     assert all(p.startswith("/") for p in filepaths)
 
-    root = find_minimal_unique_root(filepaths)
+    root = find_unique_root(filepaths)
 
     # 1) Root must be a common ancestor of all files
     assert all(
@@ -202,7 +202,7 @@ def test_identical_paths_edge_case():
     # When inputs contain identical paths, uniqueness is impossible from any higher root.
     # The function should fall back to the full common path (which equals that path).
     filepaths = ["/data/p/x.txt", "/data/p/x.txt"]
-    root = find_minimal_unique_root(filepaths)
+    root = find_unique_root(filepaths)
 
     # Must be a common ancestor (trivially true if equals the path)
     assert _is_prefix_path(root, filepaths[0])
@@ -217,7 +217,7 @@ def test_single_path_trivial_case():
     # With a single path, the minimal unique root can be the path itself
     # (since there is nothing to disambiguate).
     filepaths = ["/only/one/file.txt"]
-    root = find_minimal_unique_root(filepaths)
+    root = find_unique_root(filepaths)
 
     assert _is_prefix_path(root, filepaths[0])
     # Relative path uniqueness is trivially satisfied
@@ -235,7 +235,7 @@ def test_minimal_unique_root_windows_like_paths(filepaths):
     # These are Windows-like paths; the implementation should handle them
     # if it relies on os.path/commonpath properly. If your implementation
     # is POSIX-only, mark these xfail or normalize inputs before calling.
-    root = find_minimal_unique_root(filepaths)
+    root = find_unique_root(filepaths)
 
     # Common-ancestor + uniqueness properties
     assert all(_is_prefix_path(root, p) for p in filepaths)
