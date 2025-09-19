@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 from collections.abc import Mapping
 import yaml
-
+from mne.io import read_raw
+from mne import read_epochs
 from cocofeats.loggers import get_logger
 from cocofeats.definitions import RulesLike
 
@@ -118,3 +119,71 @@ def load_configuration(rules: RulesLike) -> dict[str, Any]:
         if close_after:
             f.close()
             active_log.debug("Closed YAML file handle")
+
+
+from pathlib import Path
+from typing import Union
+import mne
+from cocofeats.loggers import get_logger
+
+log = get_logger(__name__)
+
+PathLike = Union[str, "os.PathLike[str]"]
+
+
+def load_meeg(meeg_file: PathLike, kwargs: dict | None = None):
+    """
+    Load a MEEG file (Raw or Epochs) using MNE-Python.
+
+    Parameters
+    ----------
+    meeg_file : PathLike
+        Path to the MEEG file to be loaded.
+    kwargs : dict, optional
+        Additional keyword arguments passed to the MNE loader.
+        Defaults to ``dict(preload=True, verbose='error')``.
+
+    Returns
+    -------
+    mne.io.BaseRaw | mne.Epochs
+        Loaded MEEG object (either Raw or Epochs).
+
+    Raises
+    ------
+    ValueError
+        If the file cannot be loaded as Raw or Epochs.
+
+    Notes
+    -----
+    - This function first attempts to load the file with
+      :func:`mne.io.read_raw` (which automatically detects file types).
+    - If that fails, it falls back to trying :func:`mne.read_epochs`.
+    - If both attempts fail, a ValueError is raised.
+    """
+    if kwargs is None:
+        kwargs = dict(preload=True, verbose="error")
+
+    meeg_file = Path(meeg_file)
+    log.debug("Attempting to load MEEG file", file=str(meeg_file), kwargs=kwargs)
+
+    try:
+        # Try to load as Raw
+        meeg = mne.io.read_raw(meeg_file, **kwargs)
+        log.info("Loaded MEEG file as Raw", file=str(meeg_file))
+    except Exception as e_raw:
+        log.debug("Failed to load as Raw, trying Epochs", file=str(meeg_file), error=str(e_raw))
+        try:
+            # try to load as epochs
+            meeg = mne.read_epochs(meeg_file, **kwargs)
+            log.info("Loaded MEEG file as Epochs", file=str(meeg_file))
+        except Exception as e_epochs:
+            log.debug(
+                "Failed to load as Epochs",
+                file=str(meeg_file),
+                error=str(e_epochs),
+            )
+            raise ValueError(
+                f"Could not load MEEG file {meeg_file}. Error: {e_epochs}"
+            ) from e_epochs
+
+    return meeg
