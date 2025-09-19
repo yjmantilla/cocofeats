@@ -10,10 +10,14 @@ from cocofeats.definitions import PathLike
 from cocofeats.definitions import Artifact, FeatureResult
 from typing import Any
 import json
+from . import register_feature
+
 
 log = get_logger(__name__)
 
-def basic_preprocessing(mne_object, downsample=None, filter_args=None, epoch_config=None, notch_filter=None, extra_artifacts: bool = False) -> FeatureResult:
+
+@register_feature
+def basic_preprocessing(mne_object, resample=None, filter_args=None, epoch_config=None, notch_filter=None, extra_artifacts: bool = False) -> FeatureResult:
 
     if isinstance(mne_object, (str, os.PathLike)):
         mne_object = load_meeg(mne_object)
@@ -33,14 +37,14 @@ def basic_preprocessing(mne_object, downsample=None, filter_args=None, epoch_con
     # Filter the data
     if notch_filter is not None:
         mne_object = mne_object.notch_filter(**notch_filter, verbose=False)
-        log.info('NOTCH FILTERED with', notch_filter)
+        log.info('Notch Filter Applied', notch_filter=notch_filter)
         if extra_artifacts:
             report.add_figure(mne_object.compute_psd().plot(show=False), title=f'Power Spectral Density After Notch Filtering')
             log.debug("MNEReport: added PSD after notch filtering figure")
 
     if filter_args is not None:
         mne_object = mne_object.filter(**filter_args, verbose=False)
-        log.info('FILTERED with', filter_args)
+        log.info('Filter Applied', filter_args=filter_args)
         if extra_artifacts:
             report.add_figure(mne_object.compute_psd().plot(show=False), title=f'Power Spectral Density After Filtering')
             log.debug("MNEReport: added PSD after filtering figure")
@@ -49,7 +53,7 @@ def basic_preprocessing(mne_object, downsample=None, filter_args=None, epoch_con
     if epoch_config is not None:
         if isinstance(epoch_config, dict):
             mne_object = mne.make_fixed_length_epochs(mne_object, preload=True, **epoch_config)
-            log.info('EPOCH SEGMENTATION with', epoch_config)
+            log.info('EPOCH SEGMENTATION with make_fixed_length_epochs', epoch_config=epoch_config)
         elif isinstance(epoch_config, str):
             if epoch_config == 'SingleEpoch':
                 mne_object = mne.make_fixed_length_epochs(mne_object, preload=True, duration=mne_object.times[-1], overlap=0)
@@ -59,7 +63,7 @@ def basic_preprocessing(mne_object, downsample=None, filter_args=None, epoch_con
                     raise ValueError("No annotations found in the MNE object for epoching.")
                 events, event_id = mne.events_from_annotations(mne_object)
                 mne_object = mne.Epochs(mne_object, events=events, event_id=event_id, preload=True)
-                log.info('EPOCH SEGMENTATION with Events from annotations')
+                log.info('EPOCH SEGMENTATION with Events', event_id=event_id)
             else:
                 raise ValueError(f"Unknown epoch_config: {epoch_config}")
 
@@ -68,15 +72,15 @@ def basic_preprocessing(mne_object, downsample=None, filter_args=None, epoch_con
             log.debug("MNEReport: added epochs after segmentation figure")
 
 
-    if downsample:
-        log.info(f'DOWNSAMPLING TO {downsample}Hz')
-        mne_object = mne_object.resample(downsample, verbose=False)
+    if resample:
+        mne_object = mne_object.resample(resample, verbose=False)
+        log.info('Resample Applied', resample=resample)
         if extra_artifacts:
-            report.add_figure(mne_object.compute_psd().plot(show=False), title=f'Power Spectral Density After Downsampling')
-            log.debug("MNEReport: added PSD after downsampling figure")
+            report.add_figure(mne_object.compute_psd().plot(show=False), title=f'Power Spectral Density After Resampling')
+            log.debug("MNEReport: added PSD after resampling figure")
 
     this_metadata = {
-        'downsample': downsample,
+        'resample': resample,
         'filter_args': filter_args,
         'epoch_config': epoch_config,
         'notch_filter': notch_filter,
