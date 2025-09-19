@@ -1,0 +1,71 @@
+FeatureDefinitions:
+
+  CheckLineFrequency:
+    overwrite : False
+    flow:
+      - id: 0
+        feature: SourceFile
+      - id: 1
+        function: spectrum
+        depends_on: [0]
+        args:
+          meeg: id.0
+          compute_psd_kwargs:
+            method: 'welch'
+            fmin: 0
+            fmax: 200
+
+
+  BasicPrep1:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: SourceFile
+      - id: 1
+        function: basic_preprocessing
+        depends_on: [0]
+        args:
+          mne_object: id.0
+          resample: 250              # resample to 250 Hz
+          notch_filter:
+            freqs: [40]           # powerline
+            filter_length: 'auto'
+            notch_widths: null
+            trans_bandwidth: 1
+            method: 'fir'
+            iir_params: null
+            mt_bandwidth: null
+            p_value: 0.05
+            picks: null
+            n_jobs: null
+            phase: 'zero'
+            fir_window: 'hamming'
+            fir_design: 'firwin'
+            pad: 'reflect_limited'
+          filter_args:
+            l_freq: 1.0
+            h_freq: 40.0
+          epoch_config:
+            duration: 2.0
+            overlap: 0.5
+          extra_artifacts: True
+
+  InterFeatureDependence:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: BasicPrep1.fif
+      - id: 1
+        feature: CheckLineFrequency.nc
+      - id: 3
+        function: dummy
+        depends_on: [0, 1]
+        args:
+          param1: id.0
+          param2: id.1
+
+
+FeaturesToCompute:
+  - BasicPrep1
+  - CheckLineFrequency
+  - InterFeatureDependence
