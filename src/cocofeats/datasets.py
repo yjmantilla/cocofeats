@@ -184,7 +184,7 @@ def replace_brainvision_filename(fpath: PathLike, newname: str) -> None:
 
 def make_dummy_dataset(
     EXAMPLE: PathLike | list[PathLike],
-    PATTERN: str = "T%task%/S%session%/sub%subject%_%acquisition%_%run%",
+    PATTERN: str = "T%task%/S%session%/sub%subject%_%acquisition%_%run%_eeg",
     DATASET: str = "DUMMY",
     NSUBS: int = 2,
     NSESSIONS: int = 2,
@@ -437,13 +437,16 @@ def get_dummy_raw(
     exponent: float = 1.0,
     random_state: int | np.random.Generator | None = None,
     event_id: int = 1,
+    tmin: float = -0.1,
+    tmax: float = 0.4,
 ) -> tuple[mne.io.Raw, np.ndarray]:
     """
     Create a dummy MNE Raw object and an events array.
 
     The signals are 1/f^alpha (pink-like) noise per channel, z-scored independently.
     Events are placed evenly across the duration (exactly ``NUMEVENTS`` events),
-    starting at time 0 and never including the last sample.
+    ensuring they are far enough from the start and end to allow epoching
+    with the given ``tmin``/``tmax`` window.
 
     Parameters
     ----------
@@ -461,6 +464,10 @@ def get_dummy_raw(
         Seed or Generator for reproducibility of the noise. Default is None.
     event_id : int, optional
         Event code to assign to all events (column 3 of the events array). Default is 1.
+    tmin : float, optional
+        Minimum time before event (in seconds) needed for epoching. Default is -0.1.
+    tmax : float, optional
+        Maximum time after event (in seconds) needed for epoching. Default is 0.4.
 
     Returns
     -------
@@ -472,8 +479,9 @@ def get_dummy_raw(
     Notes
     -----
     - The number of samples is computed as ``n_times = int(round(SFREQ * STOP))``.
-    - Events are placed at equally spaced sample indices from 0 to ``n_times-1``
-      (``endpoint=False``), ensuring exactly ``NUMEVENTS`` events.
+    - Events are placed at equally spaced sample indices within safe margins,
+      so that each event can be used to create an epoch with the specified
+      ``tmin``/``tmax`` window.
 
     Examples
     --------
@@ -517,15 +525,103 @@ def get_dummy_raw(
     # ---- Raw object ----
     raw = mne.io.RawArray(data, info)
 
-    # ---- Events (exactly NUMEVENTS, evenly spaced) ----
-    # Place events at equally spaced samples in [0, n_times) without including n_times
-    event_samples = np.linspace(0, n_times, NUMEVENTS, endpoint=False, dtype=int)
+    # ---- Events (exactly NUMEVENTS, evenly spaced, with safe margins) ----
+    # Compute safe margins in samples based on tmin/tmax for later epoching
+    margin_start = max(0, int(np.ceil(abs(tmin) * SFREQ)))
+    margin_end = max(0, int(np.ceil(tmax * SFREQ)))
+
+    if n_times <= (margin_start + margin_end):
+        raise ValueError("Recording too short for requested margins.")
+
+    # Place events evenly between margin_start and n_times - margin_end
+    event_samples = np.linspace(
+        margin_start,
+        n_times - margin_end,
+        NUMEVENTS,
+        endpoint=False,
+        dtype=int,
+    )
+
+    # Ensure uniqueness / monotonicity
+    if len(np.unique(event_samples)) != NUMEVENTS:
+        raise ValueError(
+            f"Could not place {NUMEVENTS} unique events in {n_times} samples "
+            f"with margins {margin_start}, {margin_end}."
+        )
+
     new_events = np.column_stack(
         [event_samples, np.zeros(NUMEVENTS, dtype=int), np.full(NUMEVENTS, event_id, dtype=int)]
     )
 
     return raw, new_events
 
+
+def get_dummy_epochs(
+    NCHANNELS: int = 5,
+    SFREQ: float = 200.0,
+    STOP: float = 10.0,
+    NUMEVENTS: int = 10,
+    *,
+    exponent: float = 1.0,
+    random_state: int | np.random.Generator | None = None,
+    event_id: int = 1,
+    tmin: float = -0.1,
+    tmax: float = 0.4,
+    baseline: tuple[float, float] | None = (None, 0),
+) -> mne.Epochs:
+    """
+    Create a dummy MNE Epochs object from synthetic Raw data and events.
+
+    Parameters
+    ----------
+    NCHANNELS : int, optional
+        Number of channels. Default is 5.
+    SFREQ : float, optional
+        Sampling frequency in Hz. Default is 200.0.
+    STOP : float, optional
+        Duration of the raw signal in seconds. Default is 10.0.
+    NUMEVENTS : int, optional
+        Number of events to generate. Default is 10.
+    exponent : float, optional
+        Spectral exponent ``alpha`` for the 1/f^alpha noise. Default is 1.0.
+    random_state : int | Generator, optional
+        Seed or RNG. Default is None.
+    event_id : int, optional
+        Event code for all events. Default is 1.
+    tmin : float, optional
+        Start of each epoch in seconds. Default is -0.1.
+    tmax : float, optional
+        End of each epoch in seconds. Default is 0.4.
+    baseline : tuple or None, optional
+        Baseline correction (passed to MNE). Default is (None, 0).
+
+    Returns
+    -------
+    epochs : mne.Epochs
+        An MNE Epochs object based on synthetic Raw data.
+    """
+    raw, events = get_dummy_raw(
+        NCHANNELS=NCHANNELS,
+        SFREQ=SFREQ,
+        STOP=STOP,
+        NUMEVENTS=NUMEVENTS,
+        exponent=exponent,
+        random_state=random_state,
+        event_id=event_id,
+    )
+
+    event_dict = {"stim": event_id}
+    epochs = mne.Epochs(
+        raw,
+        events,
+        event_id=event_dict,
+        tmin=tmin,
+        tmax=tmax,
+        baseline=baseline,
+        preload=True,
+        verbose="error",
+    )
+    return epochs
 
 def save_dummy_vhdr(fpath: PathLike, dummy_args: dict[str, Any] | None = None) -> list[Path] | None:
     """
@@ -669,11 +765,11 @@ def generate_dummy_dataset(data_params: dict[str, Any] | None = None) -> None:
         if example is None:
             tmp_vhdr = Path(td) / f"{dataset_name}_template.vhdr"
             trio = save_dummy_vhdr(
-                tmp_vhdr, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 1.0, "NUMEVENTS": 4}
+                tmp_vhdr, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 10.0, "NUMEVENTS": 5}
             )
             if not trio:
                 raise RuntimeError("Failed to create example BrainVision files for dummy dataset.")
-            example = trio[0] # use the .vhdr; make_dummy_dataset will copy all trio files
+            example = trio
             params["EXAMPLE"] = example
 
         # Prepare output root (clean then create)
