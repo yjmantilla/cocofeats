@@ -32,6 +32,8 @@ dependencies = ["mne",
 "pyyaml",
 "mne-bids",
 "pybv >= 0.7.3",
+"xarray",
+"pydantic",
 ]
 
 [tool.hatch.metadata]
