@@ -1,3 +1,4 @@
+import glob
 import os
 from cocofeats.datasets import get_datasets_and_mount_point_from_pipeline_configuration
 from cocofeats.loggers import get_logger
@@ -8,6 +9,10 @@ from cocofeats.writers import save_dict_to_json
 from cocofeats.definitions import Artifact, FeatureResult
 from typing import Any, Callable
 import xarray as xr
+import glob
+import inspect
+import os
+from pathlib import Path
 log = get_logger(__name__)
 
 def iterate_feature_pipeline(
@@ -50,18 +55,39 @@ def iterate_feature_pipeline(
         log.debug("Processing file", index=index, dataset=dataset_name, file_path=file_path)
         try:
             common_root = common_roots.get(dataset_name)
-            output_path = datasets_configs[dataset_name].derivatives_path
-            if output_path:
-                output_path = get_path(output_path, mount_point=mount_point)
-                os.makedirs(output_path, exist_ok=True)
-                reference_path = os.path.relpath(file_path, start=common_root) if common_root else file_path
-                reference_path = os.path.join(output_path, reference_path)
-                os.makedirs(os.path.dirname(reference_path), exist_ok=True)
+            derivatives_path = datasets_configs[dataset_name].derivatives_path
+            if derivatives_path:
+                derivatives_path = get_path(derivatives_path, mount_point=mount_point)
+                os.makedirs(derivatives_path, exist_ok=True)
+                reference_base = os.path.relpath(file_path, start=common_root) if common_root else file_path
+                reference_base = os.path.join(derivatives_path, reference_base)
+                os.makedirs(os.path.dirname(reference_base), exist_ok=True)
             else:
-                reference_path = file_path
+                reference_base = file_path
 
-            output = feature(file_path)
-            reference_path = reference_path + '@' + snake_to_camel(feature.__name__)
+            # For now, split up till the first @ (which we are using as the separator for feature name)
+            if "@" in reference_base:
+                reference_base = reference_base.split("@", 1)[0]
+            reference_path = reference_base + '@' + snake_to_camel(feature.__name__)
+
+            any_artifacts_done =glob.glob(reference_path + '*')  # ensure the directory exists
+            # remove any that have more than 1 @ (since those may not be from this specific feature)
+            any_artifacts_done = [f for f in any_artifacts_done if f.count('@') == 1]
+            extra_args = {}
+
+            if 'reference_base' in inspect.signature(feature).parameters:
+                extra_args['reference_base'] = Path(reference_base)
+            if 'dataset_config' in inspect.signature(feature).parameters:
+                extra_args['dataset_config'] = datasets_configs[dataset_name]
+            if 'mount_point' in inspect.signature(feature).parameters:
+                extra_args['mount_point'] = mount_point
+
+            
+            if not any_artifacts_done:
+                output = feature(file_path, **extra_args)
+            else:
+                log.info("Skipping already processed file", index=index, dataset=dataset_name, file_path=file_path, artifacts=any_artifacts_done)
+                continue
 
             # Write artifacts
             for artifact_name, artifact in output.artifacts.items():
@@ -133,38 +159,29 @@ if __name__ == "__main__":
     print("Files per dataset:", files_per_dataset)
     print("All files with indices:", all_files)
     print("Common roots:", common_roots)
-    
 
-    [print(x[2]) for x in all_files]
+        # Now run the feature extraction    
+    from cocofeats.features import register_feature, list_features, get_feature
+    print("Registered features:", list_features())
 
-
-    
-    from cocofeats.utils import replace_bids_suffix, find_unique_root
-
-    # outputs
-    outputs = [x[2].replace(".vhdr", "_report.html") for x in all_files]
-    root= find_unique_root([x[2] for x in all_files], mode="minimal")
-    outputs = [os.path.join("_outputs", os.path.relpath(y, start=root)) for y in outputs]
-
+    # for feature in ['spectrum', 'basic_preprocessing']:
+    #     iterate_feature_pipeline(
+    #         pipeline_configuration=pipeline_input,
+    #         feature=get_feature(feature),
+    #         max_files_per_dataset=None,
+    #     )
 
 
-    # write files to a config.yml for snakemake
-    files_dict = {
-        'pairs': [{'input':x[2], 'output':y} for x,y in zip(all_files, outputs)],
-        }
-    import yaml
-    with open("pipeline_config.yml", "w") as f:
-        yaml.dump(files_dict, f)
+        # 1) Load and register flows
+    from cocofeats.dag import register_flows_from_yaml
+    reg, registered = register_flows_from_yaml("pipeline.yml")
+    print("Composite flows:", registered)
 
-    
-    
-    
-    from cocofeats.features.spectral import spectrum
-    from cocofeats.features.preprocessing import basic_preprocessing
-
-    for feature in [spectrum, basic_preprocessing]:
+    # 2) Use your existing iterate_feature_pipeline per flow name
+    from cocofeats.features import get_feature
+    for flow_name in ["BasicPrep1", "CheckLineFrequency", "InterFeatureDependence",]:
         iterate_feature_pipeline(
             pipeline_configuration=pipeline_input,
-            feature=feature,
-            max_files_per_dataset=None,
+            feature=get_feature(flow_name),  # the thin wrapper
+            max_files_per_dataset=2,
         )
