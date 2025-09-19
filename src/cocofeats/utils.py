@@ -105,6 +105,67 @@ def get_path(path: str | dict[str, str], mount_point: str | None = None) -> str:
     log.debug("get_path: returning direct path", path=path)
     return path
 
+def snake_to_camel(snake_str):
+    """Convert a snake_case string to CamelCase.
+
+    Parameters
+    ----------
+    snake_str : str
+        The input string in snake_case format.
+
+    Returns
+    -------
+    str
+        The converted string in CamelCase format.
+    """
+    components = snake_str.split('_')
+    return ''.join(x.title() for x in components)
+
+
+def analyze_bids_filename(path: PathLike) -> dict[str, bool]:
+    """
+    Analyze whether a filename follows BIDS-like conventions.
+
+    Parameters
+    ----------
+    path : PathLike
+        The file path to check (``str`` or ``os.PathLike``).
+
+    Returns
+    -------
+    dict
+        Dictionary with:
+        - ``is_key_value_pairs`` : bool
+            True if all underscore-separated parts before the suffix are
+            BIDS-like key-value pairs (`key-value`).
+        - ``has_suffix`` : bool
+            True if there is a final part (before the extension) that is not
+            a key-value pair (e.g., "_bold", "_eeg", "_meg").
+    """
+    path = Path(path)
+    filename = path.stem  # remove extension
+    parts = filename.split('_')
+
+    def is_key_value(part: str) -> bool:
+        if '-' not in part:
+            return False
+        key, value = part.split('-', 1)
+        return key.isalnum() and all(c.isalnum() or c == '-' for c in value)
+
+    # All but possibly the last part must be key-value pairs
+    key_value_parts = [is_key_value(p) for p in parts]
+
+    # If last part is not a key-value → treat as suffix
+    has_suffix = not key_value_parts[-1]
+
+    # For is_key_value_pairs we require all parts before suffix to be key-value
+    is_key_value_pairs = all(key_value_parts[:-1]) if has_suffix else all(key_value_parts)
+
+    return {
+        "is_key_value_pairs": is_key_value_pairs,
+        "has_suffix": has_suffix,
+    }
+
 
 def replace_bids_suffix(path: PathLike, new_suffix: str, new_ext: str) -> Path:
     """
