@@ -1,6 +1,5 @@
 import os
 from cocofeats.datasets import get_datasets_and_mount_point_from_pipeline_configuration
-from cocofeats.features.base import FeatureBase
 from cocofeats.loggers import get_logger
 from cocofeats.loaders import load_configuration
 from cocofeats.utils import get_path, replace_bids_suffix, find_unique_root, snake_to_camel
