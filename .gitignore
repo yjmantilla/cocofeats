@@ -17,6 +17,7 @@ dist/
 docs/sg_execution_times.rst
 src/*/_version.py
 _data/
+_outputs/
 
 # Virtual environments
 .venv/
