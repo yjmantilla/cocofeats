@@ -118,6 +118,8 @@ def snake_to_camel(snake_str):
     str
         The converted string in CamelCase format.
     """
+    if '_' not in snake_str:
+        return snake_str # no conversion needed
     components = snake_str.split('_')
     return ''.join(x.title() for x in components)
 
