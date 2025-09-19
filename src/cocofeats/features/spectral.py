@@ -10,9 +10,12 @@ from cocofeats.definitions import Artifact, FeatureResult
 from typing import Any
 import xarray as xr
 import json
+from . import register_feature
 
 log = get_logger(__name__)
 
+
+@register_feature
 def spectrum(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
     compute_psd_kwargs: dict[str, Any] | None = None,
