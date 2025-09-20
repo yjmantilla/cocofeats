@@ -1,19 +1,25 @@
 import inspect
 import os
 from collections.abc import Callable
+from typing import Any, List
 
 from cocofeats.datasets import get_datasets_and_mount_point_from_pipeline_configuration
 from cocofeats.iterators import get_all_files_from_pipeline_configuration
 from cocofeats.loggers import get_logger
 from cocofeats.utils import get_path
-
+from cocofeats.features import get_feature, list_features
+from cocofeats.flows import get_flow, list_flows
+from cocofeats.dag import run_flow
+import pandas as pd
 log = get_logger(__name__)
 
 
 def iterate_feature_pipeline(
     pipeline_configuration: dict,
-    feature: Callable,
+    feature: Callable | str,
     max_files_per_dataset: int | None = None,
+    dry_run: bool = False,
+    only_index: int | List[int] | None = None,
 ) -> None:
     """
     Iterate over all files specified in the pipeline configuration and call a given function on each file.
@@ -45,6 +51,14 @@ def iterate_feature_pipeline(
 
     log.info("iterate_call_pipeline: starting processing", total_files=len(all_files))
 
+    dry_run_collection = []
+    if only_index is not None:
+        all_files = [item for item in all_files if item[0] in (only_index if isinstance(only_index, list) else [only_index])]
+        if len(all_files) != len(only_index if isinstance(only_index, list) else [only_index]):
+            log.warning("Some specified indices in only_index were not found in the files to process.", requested_indices=only_index, found_indices=[item[0] for item in all_files])
+            log.warning("Missing indices will be ignored.", missing_indices=list(set(only_index if isinstance(only_index, list) else [only_index]) - set([item[0] for item in all_files])))
+            log.warning("Proceeding with available indices.")
+
     for index, dataset_name, file_path in all_files:
         log.debug("Processing file", index=index, dataset=dataset_name, file_path=file_path)
         try:
@@ -61,6 +75,17 @@ def iterate_feature_pipeline(
             else:
                 reference_base = file_path
             extra_kwargs = {}
+
+            #feature(file_path, **extra_kwargs)
+            if isinstance(feature, Callable):
+                feature(file_path, **extra_kwargs)
+            elif isinstance(feature, str):
+                if feature in list_features():
+                    feature = get_feature(feature)
+                elif feature in list_flows():
+                    feature = get_flow(feature)
+
+
             if hasattr(feature, "func"):
                 signature = inspect.signature(feature.func).parameters
             else:
@@ -72,7 +97,20 @@ def iterate_feature_pipeline(
             if "mount_point" in signature:
                 extra_kwargs["mount_point"] = mount_point
 
-            feature(file_path, **extra_kwargs)
+            if feature.name in list_features():
+                feature(file_path, **extra_kwargs)
+            elif feature.name in list_flows():
+
+                result = run_flow(feature.definition, feature.name, file_path, **extra_kwargs, dry_run=dry_run)
+                res = {}
+                res['index'] = index
+                res['dataset'] = dataset_name
+                res['file_path'] = file_path
+                res.update(result)
+                if dry_run:
+                    log.info("Dry run:", **res)
+                    dry_run_collection.append(res)
+
 
             log.info(
                 "Processed file successfully",
@@ -91,7 +129,8 @@ def iterate_feature_pipeline(
             )
 
     log.info("iterate_call_pipeline: completed processing")
-
+    if dry_run:
+        return pd.DataFrame(dry_run_collection)
 
 if __name__ == "__main__":
     from cocofeats.datasets import generate_dummy_dataset
@@ -170,8 +209,10 @@ if __name__ == "__main__":
 
     # "BasicPrep1", "CheckLineFrequency",
     for flow_name in ["InterFeatureDependence", "BasicPrep1", "CheckLineFrequency"]:
-        iterate_feature_pipeline(
+        df = iterate_feature_pipeline(
             pipeline_configuration=pipeline_input,
-            feature=get_flow(flow_name),  # the thin wrapper
+            feature=flow_name,  # the thin wrapper
             max_files_per_dataset=None,
+            dry_run = True,
+            only_index = [3,5]
         )

@@ -3,7 +3,7 @@ import glob
 import inspect
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List
 
 import yaml
 
@@ -87,7 +87,7 @@ def _is_step_cached(
     # prefix = f"{reference_base}@{snake_to_camel(step_feature_name)}"
     postfix = f"@{step_feature_name}"
     # return any(reference_base.parent.glob(Path(prefix).name + ".*"))
-    candidates = glob.glob(reference_base.as_posix() + postfix)  # or use
+    candidates = glob.glob(reference_base.as_posix() + postfix if isinstance(reference_base, Path) else reference_base + postfix)  # or use
     if len(candidates) > 1:
         if not accept_ambiguous:
             log.error(
@@ -148,6 +148,16 @@ def register_flows_from_yaml(yaml_path: str) -> list[str]:
     return registered
 
 
+
+def _artifact_candidates_for(prefix: str) -> list[str]:
+    return sorted(glob.glob(prefix + ".*"))
+
+def _split_feature_ref(feature_ref: str) -> tuple[str, str | None]:
+    if "." in feature_ref:
+        base, ext = feature_ref.split(".", 1)
+        return base, ext
+    return feature_ref, None
+
 # ---------- executor ----------
 
 
@@ -158,11 +168,19 @@ def run_flow(
     reference_base: Path,
     dataset_config: Any = None,
     mount_point: Path | None = None,
-) -> FeatureResult:
+    dry_run: bool = False,
+) -> FeatureResult | Dict[str, Any]:
     """
-    Evaluate a flow on a single file.
-    - feature steps: if cached and overwrite=False, assume ready; otherwise compute.
-    - function steps: always execute (they are primitives returning FeatureResult).
+    Evaluate (or dry-run) a flow on a single file.
+
+    When dry_run=True:
+      - Do NOT execute any steps.
+      - Report, per step, whether the expected artifacts are already present.
+      - Return a dict with a 'plan' list (so callers don't confuse it with FeatureResult).
+
+    Normal mode:
+      - 'feature' steps: if cached and overwrite=False, skip compute; else compute or recurse.
+      - 'function' steps: execute; if it's the last step, save artifacts under '@<FlowName>*'.
     """
     overwrite = bool(flow_def.get("overwrite", False))
     flow = flow_def.get("flow", [])
@@ -170,94 +188,130 @@ def run_flow(
 
     store: dict[int, Any] = {}
     last_result: FeatureResult | None = None
+    plan: List[Dict[str, Any]] = [] if dry_run else None
 
-    # check if last step is a feature and cached
-    if not overwrite:
-        flow[-1]
-        cached, candidate = _is_step_cached(
-            flow_name, flow_name + ".*", reference_base, accept_ambiguous=True
+    def _record(**kwargs):
+        if plan is not None:
+            plan.append(kwargs)
+
+    # In dry-run, also check the final output of the flow upfront
+    final_prefix = reference_base.as_posix() + "@" + snake_to_camel(flow_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(flow_name)
+    if dry_run:
+        final_candidates = _artifact_candidates_for(final_prefix)
+        _record(
+            id="final",
+            kind="flow_output",
+            name=flow_name,
+            prefix=final_prefix,
+            cached=len(final_candidates) > 0,
+            paths=final_candidates,
         )
-        if cached:
-            log.info(
-                "Last step of the flow is cached",
-                flow=flow_name,
-                reference_base=reference_base,
-                candidate=candidate,
-            )
-            # Return a lightweight marker (you can return paths if you want)
-            return None
+    else:
+        # Early skip if final already cached and not overwriting
+        if not overwrite:
+            final_candidates = _artifact_candidates_for(final_prefix)
+            if len(final_candidates) > 0:
+                log.info(
+                    "Last step of the flow is cached",
+                    flow=flow_name,
+                    reference_base=reference_base,
+                    candidate=final_candidates[0],
+                )
+                # Preserve your previous behavior: return None means "already done"
+                return None
 
     for sid in order:
         step = next(s for s in flow if s["id"] == sid)
+
         # 1) 'feature' step
         if "feature" in step:
-            feature_name = step["feature"]
+            feature_ref = step["feature"]
 
-            if feature_name == "SourceFile":
+            if feature_ref == "SourceFile":
                 store[sid] = file_path
-                log.debug("Flow step SourceFile", flow=flow_name, id=sid, path=file_path)
+                _record(id=sid, kind="source", name="SourceFile", path=file_path)
                 continue
 
-            # feature can be another flow (composite) or a registered primitive feature
-            # If cached & not overwrite: we don't need to recompute now; we store a sentinel.
-            # If not cached or overwrite: compute.
-            cached, candidate = (
-                _is_step_cached(flow_name, feature_name, reference_base)
-                if not overwrite
-                else (False, None)
-            )
-            if cached:
-                log.debug("Using cached feature", flow=flow_name, id=sid, feature=feature_name)
-                # Store a lightweight marker (you can store paths if you want)
-                store[sid] = candidate  # just the first candidate (see _is_step_cached)
-                last_result = candidate
+            base_name, ext = _split_feature_ref(feature_ref)
+            prefix = reference_base.as_posix() + "@" + snake_to_camel(base_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(base_name)
+            candidates = _artifact_candidates_for(prefix)
+            if ext:
+                candidates = [p for p in candidates if p.endswith("." + ext)]
+
+            if dry_run:
+                entry: Dict[str, Any] = {
+                    "id": sid,
+                    "kind": "feature",
+                    "name": feature_ref,
+                    "prefix": prefix,
+                    "cached": len(candidates) > 0,
+                    "paths": candidates,
+                }
+                if base_name in list_flows():
+                    sub_def = get_flow(base_name).definition
+                    entry["subflow_plan"] = run_flow(
+                        sub_def,
+                        base_name,
+                        file_path,
+                        reference_base,
+                        dataset_config=dataset_config,
+                        mount_point=mount_point,
+                        dry_run=True,
+                    )
+                _record(**entry)
                 continue
 
-            if "." in feature_name:
-                feature_name = feature_name.split(".")[
-                    0
-                ]  # when dependency is given as FeatureName.ext, the feature itself is 'FeatureName'
+            # normal execution path
+            cached_here = (len(candidates) > 0) and not overwrite
+            if cached_here:
+                log.debug(
+                    "Using cached feature",
+                    flow=flow_name,
+                    id=sid,
+                    feature=feature_ref,
+                    paths=candidates,
+                )
+                store[sid] = candidates  # marker
+                last_result = None       # still fine; this step is cached
+                continue
 
-            if feature_name in list_flows():
-
-                log.debug("Recurse into sub-flow", parent=flow_name, child=feature_name)
+            if base_name in list_flows():
+                log.debug("Recurse into sub-flow", parent=flow_name, child=base_name)
                 sub_result = run_flow(
-                    get_flow(feature_name).definition,
-                    feature_name,
+                    get_flow(base_name).definition,
+                    base_name,
                     file_path,
-                    reference_base=reference_base.as_posix(),  # pass as str
+                    reference_base=reference_base,
                     dataset_config=dataset_config,
                     mount_point=mount_point,
+                    dry_run=False,
                 )
+                # sub-flow may return None if already cached
                 store[sid] = sub_result
-                last_result = sub_result
-
-                reference_path = reference_base.as_posix() + "@" + snake_to_camel(feature_name)
-
-                for artifact_name, artifact in sub_result.artifacts.items():
-                    log.info("Processed artifact", name=artifact_name, file=artifact)
-                    artifact_path = reference_path + artifact_name  # has the extension
-                    artifact.writer(artifact_path)
-                    log.info("Saved artifact", file=artifact_path)
-
+                last_result = sub_result if isinstance(sub_result, FeatureResult) else last_result
             else:
-                log.error("Unknown feature in flow", flow=flow_name, id=sid, feature=feature_name)
-                raise ValueError(f"Unknown feature '{feature_name}' in flow '{flow_name}'")
+                log.error("Unknown feature in flow", flow=flow_name, id=sid, feature=feature_ref)
+                raise ValueError(f"Unknown feature '{feature_ref}' in flow '{flow_name}'")
 
-        # 2) 'function' step (primitive function that returns FeatureResult)
+        # 2) 'function' step
         elif "function" in step:
-
             func_name = step["function"]
-            reference_path = (
-                reference_base.as_posix()
-                if isinstance(reference_base, Path)
-                else reference_base + "@" + snake_to_camel(func_name)
-            )
 
-            extra_args = {}
+            if dry_run:
+                if not sid == order[-1]:
+                    _record(
+                        id=sid,
+                        kind="function",
+                        name=func_name,
+                        will_compute=True,
+                        is_final=(sid == order[-1]),
+                    )
+                continue
+                # not sure what to do if not
 
             fn = get_feature(func_name)
 
+            extra_args = {}
             if "reference_base" in inspect.signature(fn).parameters:
                 extra_args["reference_base"] = Path(reference_base)
             if "dataset_config" in inspect.signature(fn).parameters:
@@ -273,17 +327,36 @@ def run_flow(
             store[sid] = res
             last_result = res
 
-            # check if we are in the last step, in that case its saved
             if sid == order[-1]:
-                reference_path = reference_base.as_posix() + "@" + flow_name
+                # save final artifacts under '@<FlowName>'
+                reference_path = reference_base.as_posix() + "@" + snake_to_camel(flow_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(flow_name)
                 for artifact_name, artifact in res.artifacts.items():
-                    log.info("Processed artifact", name=artifact_name, file=artifact)
-                    artifact_path = reference_path + artifact_name  # has the extension
-                    artifact.writer(artifact_path)
-                    log.info("Saved artifact", file=artifact_path)
+                    try:
+                        log.info("Processed artifact", name=artifact_name, file=artifact)
+                        artifact_path = reference_path + artifact_name
+                        artifact.writer(artifact_path)
+                        log.info("Saved artifact", file=artifact_path)
+                    except Exception as e:
+                        log.error(
+                            "Error saving artifact",
+                            artifact_name=artifact_name,
+                            path=reference_path + artifact_name,
+                            error=str(e),
+                            exc_info=True,
+                        )
+                        raise
 
         else:
             raise ValueError(f"Step id={sid} must specify 'feature' or 'function'")
+
+    if dry_run:
+        return {
+            "flow": flow_name,
+            "file": file_path,
+            "reference_base": reference_base.as_posix() if isinstance(reference_base, Path) else reference_base,
+            "overwrite": overwrite,
+            "plan": plan,
+        }
 
     if last_result is None:
         raise RuntimeError(f"Flow '{flow_name}' produced no result")
