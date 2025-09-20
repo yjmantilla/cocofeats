@@ -3,14 +3,14 @@ import ntpath
 import os
 import posixpath
 from collections.abc import Sequence
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal
-from cocofeats.definitions import PathLike
-from pathlib import Path
 
+from cocofeats.definitions import PathLike
 from cocofeats.loggers import get_logger
 
 log = get_logger(__name__)
+
 
 def get_num_digits(n: int, method: Literal["safe", "fast"] = "safe") -> int:
     """Return the number of decimal digits in an integer.
@@ -97,13 +97,20 @@ def get_path(path: str | dict[str, str], mount_point: str | None = None) -> str:
     if isinstance(path, dict) and mount_point is not None:
         try:
             resolved = path[mount_point]
-            log.debug("get_path: resolved via mount_point", mount_point=mount_point, resolved=resolved)
+            log.debug(
+                "get_path: resolved via mount_point", mount_point=mount_point, resolved=resolved
+            )
             return resolved
         except KeyError:
-            log.debug("get_path: missing mount_point key", mount_point=mount_point, available=list(path.keys()))
+            log.debug(
+                "get_path: missing mount_point key",
+                mount_point=mount_point,
+                available=list(path.keys()),
+            )
             raise
     log.debug("get_path: returning direct path", path=path)
     return path
+
 
 def snake_to_camel(snake_str):
     """Convert a snake_case string to CamelCase.
@@ -118,10 +125,10 @@ def snake_to_camel(snake_str):
     str
         The converted string in CamelCase format.
     """
-    if '_' not in snake_str:
-        return snake_str # no conversion needed
-    components = snake_str.split('_')
-    return ''.join(x.title() for x in components)
+    if "_" not in snake_str:
+        return snake_str  # no conversion needed
+    components = snake_str.split("_")
+    return "".join(x.title() for x in components)
 
 
 def analyze_bids_filename(path: PathLike) -> dict[str, bool]:
@@ -146,13 +153,13 @@ def analyze_bids_filename(path: PathLike) -> dict[str, bool]:
     """
     path = Path(path)
     filename = path.stem  # remove extension
-    parts = filename.split('_')
+    parts = filename.split("_")
 
     def is_key_value(part: str) -> bool:
-        if '-' not in part:
+        if "-" not in part:
             return False
-        key, value = part.split('-', 1)
-        return key.isalnum() and all(c.isalnum() or c == '-' for c in value)
+        key, value = part.split("-", 1)
+        return key.isalnum() and all(c.isalnum() or c == "-" for c in value)
 
     # All but possibly the last part must be key-value pairs
     key_value_parts = [is_key_value(p) for p in parts]
@@ -180,7 +187,7 @@ def replace_bids_suffix(path: PathLike, new_suffix: str, new_ext: str) -> Path:
     new_suffix : str
         New suffix (without leading underscore).
     new_ext : str
-        New extension. Can handle multi-part extensions (e.g. ``".nii.gz"``). 
+        New extension. Can handle multi-part extensions (e.g. ``".nii.gz"``).
         Must include the leading dot.
 
     Returns
@@ -198,7 +205,7 @@ def replace_bids_suffix(path: PathLike, new_suffix: str, new_ext: str) -> Path:
     log.debug("Received path for suffix replacement", path=str(path))
 
     stem = path.name
-    exts = "".join(path.suffixes)   # ".nii.gz" or ""
+    exts = "".join(path.suffixes)  # ".nii.gz" or ""
     base = stem[: -len(exts)] if exts else stem
     log.debug("Split stem into base and exts", base=base, exts=exts)
 
@@ -220,9 +227,9 @@ def replace_bids_suffix(path: PathLike, new_suffix: str, new_ext: str) -> Path:
 def find_unique_root(
     filepaths: Sequence[PathLike],
     *,
-    style: str = "auto",   # {'auto','posix','windows'}
-    strict: bool = True,   # if True, reject ambiguous/mixed inputs
-    mode: str = "minimal", # {'minimal','maximal'}
+    style: str = "auto",  # {'auto','posix','windows'}
+    strict: bool = True,  # if True, reject ambiguous/mixed inputs
+    mode: str = "minimal",  # {'minimal','maximal'}
 ) -> str:
     """
     Find the shallowest or deepest root such that relative paths from it are unique.
@@ -302,9 +309,7 @@ def find_unique_root(
     for s in raw:
         if strict:
             if not use_windows and "\\" in s:
-                log.debug(
-                    "find_unique_root: backslash in POSIX path with strict=True", path=s
-                )
+                log.debug("find_unique_root: backslash in POSIX path with strict=True", path=s)
                 raise ValueError(
                     f"Backslash found in POSIX path '{s}' (strict=True). "
                     "Use strict=False to coerce '\\' → '/'."
@@ -335,9 +340,7 @@ def find_unique_root(
 
     split = [PurePath(s).parts for s in paths]
     prefix_len = len(PurePath(common_prefix).parts)
-    log.debug(
-        "find_unique_root: prefix info", common_prefix=common_prefix, prefix_len=prefix_len
-    )
+    log.debug("find_unique_root: prefix info", common_prefix=common_prefix, prefix_len=prefix_len)
 
     # Try shallowest→deepest; collect all candidates
     candidates = []
@@ -359,7 +362,7 @@ def find_unique_root(
             log.debug("find_unique_root: selected minimal root", root=chosen)
             return chosen
         elif mode == "maximal":
-            chosen = candidates[-1][1] # deepest
+            chosen = candidates[-1][1]  # deepest
             log.debug("find_unique_root: selected maximal root", root=chosen)
             return chosen
         else:

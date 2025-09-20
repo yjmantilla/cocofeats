@@ -249,6 +249,7 @@ def test_minimal_unique_root_windows_like_paths(filepaths):
 
 # --- Error conditions ---
 
+
 def test_empty_input_raises():
     with pytest.raises(ValueError, match="filepaths must be non-empty"):
         find_unique_root([])
@@ -280,6 +281,7 @@ def test_invalid_mode():
 
 # --- Explicit style selection ---
 
+
 def test_explicit_windows_style(monkeypatch):
     # Even if POSIX-looking, force Windows behavior
     filepaths = ["C:\\proj\\a.txt", "C:\\proj\\b.txt"]
@@ -296,6 +298,7 @@ def test_explicit_posix_style():
 
 # --- Lenient coercion ---
 
+
 def test_lenient_mixed_styles_coerces_to_windows():
     filepaths = ["/data/x.txt", "C:\\data\\y.txt"]
     root = find_unique_root(filepaths, style="auto", strict=False)
@@ -309,7 +312,9 @@ def test_lenient_backslash_coerced_to_slash():
     # Minimal root is "/" since relpaths are unique from root
     assert root == "/"
 
+
 # --- Edge: different drives on Windows → no common path ---
+
 
 def test_different_drives_windows_no_common(monkeypatch):
     filepaths = ["C:\\a\\x.txt", "D:\\b\\y.txt"]
@@ -320,6 +325,7 @@ def test_different_drives_windows_no_common(monkeypatch):
 
 # --- Maximal mode ---
 
+
 def test_maximal_mode_returns_deepest():
     filepaths = ["/data/project1/a.txt", "/data/project2/b.txt"]
     root_min = find_unique_root(filepaths, mode="minimal")
@@ -329,13 +335,20 @@ def test_maximal_mode_returns_deepest():
     assert root_max == "/data"
     assert root_max != root_min
 
+
 # Replace BIDS suffix tests
+
 
 @pytest.mark.parametrize(
     "input_path,new_suffix,new_ext,expected",
     [
         # Case with underscore and multi-part extension
-        ("sub-01_task-rest_bold.nii.gz", "desc-preproc", ".nii.gz", "sub-01_task-rest_desc-preproc.nii.gz"),
+        (
+            "sub-01_task-rest_bold.nii.gz",
+            "desc-preproc",
+            ".nii.gz",
+            "sub-01_task-rest_desc-preproc.nii.gz",
+        ),
         # Case with single extension
         ("sub-02_eeg.set", "clean", ".fdt", "sub-02_clean.fdt"),
         # No underscore in base
@@ -344,11 +357,12 @@ def test_maximal_mode_returns_deepest():
         ("file_without_ext", "suffix", ".txt", "file_without_ext_suffix.txt"),
     ],
 )
-
 def test_replace_bids_suffix(input_path, new_suffix, new_ext, expected):
     result = replace_bids_suffix(input_path, new_suffix, new_ext)
     assert isinstance(result, Path)
-    assert result.name == expected, f"Failed for input: {input_path}. Result: {result.name}, Expected: {expected}"
+    assert (
+        result.name == expected
+    ), f"Failed for input: {input_path}. Result: {result.name}, Expected: {expected}"
 
 
 def test_handles_multiparts():
@@ -361,6 +375,7 @@ def test_no_suffix():
     path = "plainfile"
     result = replace_bids_suffix(path, "extra", ".json")
     assert result.name == "plainfile_extra.json"
+
 
 if __name__ == "__main__":
     # pytest.main([__file__])

@@ -11,21 +11,19 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
-from cocofeats.definitions import PathLike
 
 import mne
 import numpy as np
 from mne.export import export_raw
 
-from cocofeats.utils import get_num_digits, get_path
+from cocofeats.definitions import DatasetConfig, PathLike
 from cocofeats.loaders import load_configuration
-from cocofeats.definitions import DatasetConfig
-
+from cocofeats.utils import get_num_digits, get_path
 
 
 def get_datasets_and_mount_point_from_pipeline_configuration(
-        pipeline_input: dict[str, Any] | PathLike,
-    ) -> dict[str, Any]:
+    pipeline_input: dict[str, Any] | PathLike,
+) -> dict[str, Any]:
     """
     Load the pipeline configuration and return the datasets section and mount point.
     Parameters
@@ -53,7 +51,7 @@ def get_datasets_and_mount_point_from_pipeline_configuration(
         datasets = load_configuration(datasets_path)
     elif not isinstance(datasets, dict):
         raise ValueError("'datasets' section must be a dict or a path to a YAML file.")
-    
+
     # At this point, datasets should be a dict
     # Make them into DatasetConfig instances
     datasets = {name: DatasetConfig(**cfg) for name, cfg in datasets.items()}
@@ -622,6 +620,7 @@ def get_dummy_epochs(
         verbose="error",
     )
     return epochs
+
 
 def save_dummy_vhdr(fpath: PathLike, dummy_args: dict[str, Any] | None = None) -> list[Path] | None:
     """

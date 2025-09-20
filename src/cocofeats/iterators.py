@@ -1,12 +1,14 @@
-from cocofeats.loggers import get_logger
-from cocofeats.utils import get_path, find_unique_root
-from cocofeats.definitions import DatasetConfig
-from cocofeats.datasets import get_datasets_and_mount_point_from_pipeline_configuration
 import glob
+
+from cocofeats.datasets import get_datasets_and_mount_point_from_pipeline_configuration
+from cocofeats.definitions import DatasetConfig
+from cocofeats.loggers import get_logger
+from cocofeats.utils import find_unique_root, get_path
 
 log = get_logger(__name__)
 
-def get_files_from_pattern(pattern, recursive: bool = True, exclude_filter = None) -> list[str]:
+
+def get_files_from_pattern(pattern, recursive: bool = True, exclude_filter=None) -> list[str]:
     """
     Get a list of file paths matching the given glob pattern.
 
@@ -38,7 +40,12 @@ def get_files_from_pattern(pattern, recursive: bool = True, exclude_filter = Non
 
     return files
 
-def get_all_files_across_datasets(datasets: dict[str, DatasetConfig], mount_point: str | None = None, max_files_per_dataset: int | None = None) -> dict[str, list[str]]:
+
+def get_all_files_across_datasets(
+    datasets: dict[str, DatasetConfig],
+    mount_point: str | None = None,
+    max_files_per_dataset: int | None = None,
+) -> dict[str, list[str]]:
     """
     Iterate over all datasets and retrieve files based on their patterns.
 
@@ -65,49 +72,84 @@ def get_all_files_across_datasets(datasets: dict[str, DatasetConfig], mount_poin
         log.info("get_all_files_across_datasets: processing dataset", dataset=dataset_name)
 
         if dataset_config.skip:
-            log.info("get_all_files_across_datasets: skipping dataset as per configuration", dataset=dataset_name)
+            log.info(
+                "get_all_files_across_datasets: skipping dataset as per configuration",
+                dataset=dataset_name,
+            )
             continue
 
         pattern = dataset_config.file_pattern
         if not pattern:
-            log.warning("get_all_files_across_datasets: no pattern defined for dataset", dataset=dataset_name)
+            log.warning(
+                "get_all_files_across_datasets: no pattern defined for dataset",
+                dataset=dataset_name,
+            )
             continue
 
         resolved_pattern = get_path(pattern, mount_point=mount_point)
-        log.debug("get_all_files_across_datasets: resolved pattern", dataset=dataset_name, pattern=resolved_pattern)
+        log.debug(
+            "get_all_files_across_datasets: resolved pattern",
+            dataset=dataset_name,
+            pattern=resolved_pattern,
+        )
 
         try:
-            files = get_files_from_pattern(resolved_pattern, exclude_filter=dataset_config.exclude_pattern)
+            files = get_files_from_pattern(
+                resolved_pattern, exclude_filter=dataset_config.exclude_pattern
+            )
         except Exception as e:
-            log.error("get_all_files_across_datasets: error getting files from pattern", dataset=dataset_name, error=str(e))
+            log.error(
+                "get_all_files_across_datasets: error getting files from pattern",
+                dataset=dataset_name,
+                error=str(e),
+            )
             continue
 
         if max_files_per_dataset is not None:
             files = files[:max_files_per_dataset]
-            log.debug("get_all_files_across_datasets: limited files per dataset", dataset=dataset_name, max_files=max_files_per_dataset)
+            log.debug(
+                "get_all_files_across_datasets: limited files per dataset",
+                dataset=dataset_name,
+                max_files=max_files_per_dataset,
+            )
 
         if not files:
-            log.warning("get_all_files_across_datasets: no files found for dataset", dataset=dataset_name)
+            log.warning(
+                "get_all_files_across_datasets: no files found for dataset", dataset=dataset_name
+            )
             continue
 
         files_per_dataset[dataset_name] = files
         common_root = find_unique_root(files, mode="maximal")
         common_roots[dataset_name] = common_root
-        log.info("get_all_files_across_datasets: common root for dataset", dataset=dataset_name, common_root=common_root)
-        log.info("get_all_files_across_datasets: added files for dataset", dataset=dataset_name, file_count=len(files))
+        log.info(
+            "get_all_files_across_datasets: common root for dataset",
+            dataset=dataset_name,
+            common_root=common_root,
+        )
+        log.info(
+            "get_all_files_across_datasets: added files for dataset",
+            dataset=dataset_name,
+            file_count=len(files),
+        )
     all_files = []
     for dataset, files in files_per_dataset.items():
-        log.info("get_all_files_across_datasets: dataset summary", dataset=dataset, file_count=len(files))
+        log.info(
+            "get_all_files_across_datasets: dataset summary", dataset=dataset, file_count=len(files)
+        )
         these_files = [(dataset, f) for f in files]
         all_files.extend(these_files)
     # add index to each file tuple
     all_files = [(i, dataset, f) for i, (dataset, f) in enumerate(all_files)]
-    log.info("get_all_files_across_datasets: completed", total_datasets=len(files_per_dataset), total_files=len(all_files))
+    log.info(
+        "get_all_files_across_datasets: completed",
+        total_datasets=len(files_per_dataset),
+        total_files=len(all_files),
+    )
     return files_per_dataset, all_files, common_roots
 
-def get_all_files_from_pipeline_configuration(
-    pipeline_input, max_files_per_dataset=None
-):
+
+def get_all_files_from_pipeline_configuration(pipeline_input, max_files_per_dataset=None):
     """
     Given a pipeline configuration dictionary with datasets and an optional mount point,
     retrieve all files across datasets.
@@ -125,13 +167,15 @@ def get_all_files_from_pipeline_configuration(
         A list of tuples (index, dataset_name, file_path) for all files across datasets
     """
     log.debug("get_all_files_from_pipeline_configuration: called", keys=list(pipeline_input.keys()))
-    datasets, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(
-        pipeline_input
-    )
+    datasets, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(pipeline_input)
 
     files_per_dataset, all_files, common_roots = get_all_files_across_datasets(
         datasets, mount_point=mount_point, max_files_per_dataset=max_files_per_dataset
     )
-    log.debug("get_all_files_from_pipeline_configuration: completed", total_datasets=len(files_per_dataset), total_files=len(all_files))
+    log.debug(
+        "get_all_files_from_pipeline_configuration: completed",
+        total_datasets=len(files_per_dataset),
+        total_files=len(all_files),
+    )
 
     return files_per_dataset, all_files, common_roots

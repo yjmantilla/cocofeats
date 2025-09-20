@@ -20,9 +20,11 @@ def test_register_feature_duplicate_guard():
 
     try:
         with pytest.raises(ValueError):
+
             @features.register_feature(name="temporary_feature")
             def duplicate_feature():
                 return "duplicate"
+
     finally:
         features.unregister_feature("temporary_feature")
 

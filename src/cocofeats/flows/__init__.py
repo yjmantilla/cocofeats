@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
-from typing import Any
-import sys
 import pkgutil
+import sys
+from collections.abc import Callable, Iterable
 from importlib import import_module
+from typing import Any
 
 FlowCallable = Callable[..., Any]
 
@@ -37,6 +37,7 @@ _FLOW_REGISTRY: dict[str, FlowEntry] = {}
 # Registration API
 # -------------------------
 
+
 def register_flow(
     func: FlowCallable | None = None,
     *,
@@ -60,11 +61,7 @@ def register_flow(
 
     def decorator(target: FlowCallable) -> FlowCallable:
         key = name or target.__name__
-        if (
-            not override
-            and key in _FLOW_REGISTRY
-            and _FLOW_REGISTRY[key].func is not target
-        ):
+        if not override and key in _FLOW_REGISTRY and _FLOW_REGISTRY[key].func is not target:
             raise ValueError(f"Flow '{key}' is already registered")
 
         _FLOW_REGISTRY[key] = FlowEntry(key, target, definition)
@@ -91,15 +88,14 @@ def register_flow_with_name(
 # Lookup API
 # -------------------------
 
+
 def get_flow(name: str) -> FlowEntry:
     """Return a registered flow entry by name."""
     try:
         return _FLOW_REGISTRY[name]
     except KeyError as exc:
         available = ", ".join(sorted(_FLOW_REGISTRY)) or "<none>"
-        raise KeyError(
-            f"Unknown flow '{name}'. Available flows: {available}"
-        ) from exc
+        raise KeyError(f"Unknown flow '{name}'. Available flows: {available}") from exc
 
 
 def iter_flows() -> Iterable[tuple[str, FlowEntry]]:
@@ -128,12 +124,12 @@ def unregister_flow(name: str) -> None:
 
 __all__ = [
     "FlowEntry",
-    "register_flow",
-    "register_flow_with_name",
+    "clear_flow_registry",
     "get_flow",
     "iter_flows",
     "list_flows",
-    "clear_flow_registry",
+    "register_flow",
+    "register_flow_with_name",
     "unregister_flow",
 ]
 

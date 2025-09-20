@@ -740,7 +740,7 @@ def test_auto_template_creation_when_example_missing(tmp_path: Path):
     """
     # Import the real function + module to locate the package _data dir
     from cocofeats.datasets import generate_dummy_dataset  # ← adjust if different
-    from cocofeats import datasets as ds_mod               # ← adjust if different
+    from cocofeats import datasets as ds_mod  # ← adjust if different
     import shutil
 
     dataset_name = "AUTOTPL"
@@ -773,13 +773,16 @@ def test_auto_template_creation_when_example_missing(tmp_path: Path):
         ), "Template trio should not be persisted under package _data anymore"
 
         # 2) ROOT should contain at least one generated BrainVision file from the replication
-        found_any = any(root.rglob("*.vhdr")) or any(root.rglob("*.vmrk")) or any(root.rglob("*.eeg"))
+        found_any = (
+            any(root.rglob("*.vhdr")) or any(root.rglob("*.vmrk")) or any(root.rglob("*.eeg"))
+        )
         assert found_any, "Expected at least one BrainVision file generated under ROOT"
     finally:
         # Cleanup in case the function behavior changes in the future
         if tpl_dir.exists():
             shutil.rmtree(tpl_dir)
             log.debug("Removed temporary template directory", path=tpl_dir)
+
 
 def test_returns_none(tmp_path: Path):
     ex = _write(tmp_path / "ex.txt", "content\n")

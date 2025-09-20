@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
-from typing import Any
-from collections.abc import Mapping
+from typing import Any, Union
+
+import mne
 import yaml
-from mne.io import read_raw
-from mne import read_epochs
-from cocofeats.loggers import get_logger
+
 from cocofeats.definitions import RulesLike
+from cocofeats.loggers import get_logger
 
 log = get_logger(__name__)
 
@@ -49,8 +50,6 @@ class UniqueKeySafeLoader(_BaseSafeLoader):
             seen.add(key)
 
         return super().construct_mapping(node, deep=deep)
-
-
 
 
 def load_configuration(rules: RulesLike) -> dict[str, Any]:
@@ -121,11 +120,6 @@ def load_configuration(rules: RulesLike) -> dict[str, Any]:
             active_log.debug("Closed YAML file handle")
 
 
-from pathlib import Path
-from typing import Union
-import mne
-from cocofeats.loggers import get_logger
-
 log = get_logger(__name__)
 
 PathLike = Union[str, "os.PathLike[str]"]
@@ -161,7 +155,7 @@ def load_meeg(meeg_file: PathLike, kwargs: dict | None = None):
     - If both attempts fail, a ValueError is raised.
     """
     if kwargs is None:
-        kwargs = dict(preload=True, verbose="error")
+        kwargs = {"preload": True, "verbose": "error"}
 
     meeg_file = Path(meeg_file)
     log.debug("Attempting to load MEEG file", file=str(meeg_file), kwargs=kwargs)

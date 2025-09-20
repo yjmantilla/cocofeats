@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
-from importlib import import_module
 import pkgutil
 import sys
+from collections.abc import Callable, Iterable
+from importlib import import_module
 from typing import Any
 
 FeatureCallable = Callable[..., Any]
@@ -76,20 +76,22 @@ def discover(package: str | None = None) -> None:
             continue
         import_module(f"{package_name}.{mod_info.name}")
 
+
 def register_feature_with_name(name: str, func: Callable) -> None:
     func.__name__ = name
     register_feature(func)  # reuse existing path
+
 
 # Eagerly discover features so registry is populated on package import.
 discover()
 
 __all__ = [
-    "register_feature",
+    "clear_feature_registry",
+    "discover",
     "get_feature",
     "iter_features",
     "list_features",
-    "clear_feature_registry",
-    "unregister_feature",
-    "discover",
+    "register_feature",
     "register_feature_with_name",
+    "unregister_feature",
 ]

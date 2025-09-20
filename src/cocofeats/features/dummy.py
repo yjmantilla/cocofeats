@@ -1,5 +1,7 @@
-from cocofeats.definitions import FeatureResult, Artifact
+from cocofeats.definitions import Artifact, FeatureResult
+
 from . import register_feature
+
 
 @register_feature
 def dummy(param1=None, param2=None) -> FeatureResult:
@@ -24,12 +26,7 @@ def dummy(param1=None, param2=None) -> FeatureResult:
         with open(path, "w") as f:
             f.write(message)
 
-    artifacts = {
-        ".message.txt": Artifact(
-            item=message,
-            writer=lambda path: write_message(path)
-        )
-    }
+    artifacts = {".message.txt": Artifact(item=message, writer=lambda path: write_message(path))}
 
     return FeatureResult(
         artifacts=artifacts,

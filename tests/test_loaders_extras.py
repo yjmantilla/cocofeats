@@ -13,6 +13,7 @@ def test_fallback_to_safe_loader(monkeypatch):
     # Reload the module to trigger the import-time try/except
     import importlib
     import cocofeats.loaders as loaders_mod
+
     importlib.reload(loaders_mod)
     # Should have picked SafeLoader
     assert loaders_mod._BaseSafeLoader is yaml.SafeLoader
@@ -29,6 +30,7 @@ def test_construct_mapping_non_mapping_node_raises():
 
 # --- Tests for load_meeg ---
 
+
 def test_load_meeg_reads_raw(monkeypatch, tmp_path):
     dummy = object()
 
@@ -37,7 +39,11 @@ def test_load_meeg_reads_raw(monkeypatch, tmp_path):
 
     monkeypatch.setattr(loaders.mne.io, "read_raw", fake_read_raw)
     # Make sure read_epochs would fail if called
-    monkeypatch.setattr(loaders.mne, "read_epochs", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("should not call")))
+    monkeypatch.setattr(
+        loaders.mne,
+        "read_epochs",
+        lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("should not call")),
+    )
 
     f = tmp_path / "dummy.fif"
     f.write_text("placeholder")
