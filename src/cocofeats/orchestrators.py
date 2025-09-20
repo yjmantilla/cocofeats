@@ -64,41 +64,23 @@ def iterate_feature_pipeline(
                 os.makedirs(os.path.dirname(reference_base), exist_ok=True)
             else:
                 reference_base = file_path
-
-            # For now, split up till the first @ (which we are using as the separator for feature name)
-            if "@" in reference_base:
-                reference_base = reference_base.split("@", 1)[0]
-            reference_path = reference_base + '@' + snake_to_camel(feature.__name__)
-
-            any_artifacts_done =glob.glob(reference_path + '*')  # ensure the directory exists
-            # remove any that have more than 1 @ (since those may not be from this specific feature)
-            any_artifacts_done = [f for f in any_artifacts_done if f.count('@') == 1]
-            extra_args = {}
-
-            if 'reference_base' in inspect.signature(feature).parameters:
-                extra_args['reference_base'] = Path(reference_base)
-            if 'dataset_config' in inspect.signature(feature).parameters:
-                extra_args['dataset_config'] = datasets_configs[dataset_name]
-            if 'mount_point' in inspect.signature(feature).parameters:
-                extra_args['mount_point'] = mount_point
-
-            
-            if not any_artifacts_done:
-                output = feature(file_path, **extra_args)
+            extra_kwargs = {}
+            if hasattr(feature, 'func'):
+                signature = inspect.signature(feature.func).parameters
             else:
-                log.info("Skipping already processed file", index=index, dataset=dataset_name, file_path=file_path, artifacts=any_artifacts_done)
-                continue
+                signature = inspect.signature(feature).parameters
+            if 'reference_base' in signature:
+                extra_kwargs['reference_base'] = reference_base
+            if 'dataset_config' in signature:
+                extra_kwargs['dataset_config'] = datasets_configs[dataset_name]
+            if 'mount_point' in signature:
+                extra_kwargs['mount_point'] = mount_point
 
-            # Write artifacts
-            for artifact_name, artifact in output.artifacts.items():
-                log.info("Processed artifact", name=artifact_name, file=artifact)
-                artifact_path = reference_path + artifact_name # has the extension
-                artifact.writer(artifact_path)
-                log.info("Saved artifact", file=artifact_path)
+            result = feature(file_path, **extra_kwargs)
 
             log.info("Processed file successfully", index=index, dataset=dataset_name, file_path=file_path)
         except Exception as e:
-            log.error("Error processing file", index=index, dataset=dataset_name, file_path=file_path, error=str(e))
+            log.error("Error processing file", index=index, dataset=dataset_name, file_path=file_path, error=str(e), exc_info=True)
 
     log.info("iterate_call_pipeline: completed processing")
 
@@ -164,24 +146,25 @@ if __name__ == "__main__":
     from cocofeats.features import register_feature, list_features, get_feature
     print("Registered features:", list_features())
 
-    # for feature in ['spectrum', 'basic_preprocessing']:
-    #     iterate_feature_pipeline(
-    #         pipeline_configuration=pipeline_input,
-    #         feature=get_feature(feature),
-    #         max_files_per_dataset=None,
-    #     )
+    if False:
+        for feature in ['spectrum', 'basic_preprocessing']:
+            iterate_feature_pipeline(
+                pipeline_configuration=pipeline_input,
+                feature=get_feature(feature),
+                max_files_per_dataset=2,
+            )
 
 
-        # 1) Load and register flows
-    from cocofeats.dag import register_flows_from_yaml
-    reg, registered = register_flows_from_yaml("pipeline.yml")
-    print("Composite flows:", registered)
+    # 1) Load and register flows
+    from cocofeats.flows import register_flow_with_name, list_flows, get_flow
+
 
     # 2) Use your existing iterate_feature_pipeline per flow name
     from cocofeats.features import get_feature
-    for flow_name in ["BasicPrep1", "CheckLineFrequency", "InterFeatureDependence",]:
+    # "BasicPrep1", "CheckLineFrequency", 
+    for flow_name in ["InterFeatureDependence",'BasicPrep1',"CheckLineFrequency"]:
         iterate_feature_pipeline(
             pipeline_configuration=pipeline_input,
-            feature=get_feature(flow_name),  # the thin wrapper
-            max_files_per_dataset=2,
+            feature=get_flow(flow_name),  # the thin wrapper
+            max_files_per_dataset=None,
         )
