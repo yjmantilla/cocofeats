@@ -214,11 +214,11 @@ def run_flow(
                 log.info(
                     "Last step of the flow is cached",
                     flow=flow_name,
+                    final_prefix=final_prefix,
                     reference_base=reference_base,
                     candidate=final_candidates[0],
                 )
-                # Preserve your previous behavior: return None means "already done"
-                return None
+                return {"cached": final_candidates}
 
     for sid in order:
         step = next(s for s in flow if s["id"] == sid)
@@ -271,8 +271,17 @@ def run_flow(
                     feature=feature_ref,
                     paths=candidates,
                 )
-                store[sid] = candidates  # marker
-                last_result = None       # still fine; this step is cached
+                store[sid] = candidates[0]  # marker
+                if len(candidates) > 1:
+                    log.warning(
+                        "Multiple cached artifacts found, using the first one",
+                        flow=flow_name,
+                        feature=feature_ref,
+                        reference_base=reference_base,
+                        candidates=candidates,
+                        selected=candidates[0],
+                    )
+                last_result = {"cached": candidates}
                 continue
 
             if base_name in list_flows():
