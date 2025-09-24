@@ -35,6 +35,8 @@ dependencies = ["mne",
 "xarray",
 "pydantic",
 "networkx",
+"antropy",
+"neurokit2"
 ]
 
 [tool.hatch.metadata]
