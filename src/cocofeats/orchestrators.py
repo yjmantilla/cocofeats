@@ -20,6 +20,7 @@ def iterate_feature_pipeline(
     max_files_per_dataset: int | None = None,
     dry_run: bool = False,
     only_index: int | List[int] | None = None,
+    raise_on_error: bool = False,
 ) -> None:
     """
     Iterate over all files specified in the pipeline configuration and call a given function on each file.
@@ -46,7 +47,7 @@ def iterate_feature_pipeline(
     )
 
     files_per_dataset, all_files, common_roots = get_all_files_from_pipeline_configuration(
-        pipeline_configuration, max_files_per_dataset=max_files_per_dataset
+        pipeline_configuration, max_files_per_dataset=None #max_files_per_dataset, to obtain all files and then filter by only_index
     )
 
     log.info("iterate_call_pipeline: starting processing", total_files=len(all_files))
@@ -77,9 +78,9 @@ def iterate_feature_pipeline(
             extra_kwargs = {}
 
             #feature(file_path, **extra_kwargs)
-            if isinstance(feature, Callable):
-                feature(file_path, **extra_kwargs)
-            elif isinstance(feature, str):
+            # if isinstance(feature, Callable):
+            #     feature(file_path, **extra_kwargs)
+            if isinstance(feature, str):
                 if feature in list_features():
                     feature = get_feature(feature)
                 elif feature in list_flows():
@@ -127,6 +128,8 @@ def iterate_feature_pipeline(
                 error=str(e),
                 exc_info=True,
             )
+            if raise_on_error:
+                raise e
 
     log.info("iterate_call_pipeline: completed processing")
     if dry_run:
@@ -208,11 +211,13 @@ if __name__ == "__main__":
     from cocofeats.flows import get_flow
 
     # "BasicPrep1", "CheckLineFrequency",
-    for flow_name in ["InterFeatureDependence", "BasicPrep1", "CheckLineFrequency"]:
+    # "BasicPrep1", "CheckLineFrequency", "InterFeatureDependence",
+    for flow_name in ["SpectrumArrayWelch", "SpectrumArrayMultitaper",]:
         df = iterate_feature_pipeline(
             pipeline_configuration=pipeline_input,
             feature=flow_name,  # the thin wrapper
             max_files_per_dataset=None,
-            dry_run = True,
-            only_index = [3,5]
+            dry_run = False,
+            only_index = [3,5],
+            raise_on_error = True,
         )
