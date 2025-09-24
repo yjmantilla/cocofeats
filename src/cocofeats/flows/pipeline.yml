@@ -63,3 +63,44 @@ FeatureDefinitions:
         args:
           param1: id.0
           param2: id.1
+  
+  SpectrumArrayWelch:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: BasicPrep1.fif
+      - id: 1
+        function: spectrum_array
+        depends_on: [0]
+        args:
+          meeg: id.0
+          method: 'welch'
+          method_kwargs:
+            n_fft: 256
+            n_overlap: 0
+            n_per_seg: null
+            average: 'mean'
+            window: 'hamming'
+            remove_dc: True
+            output: 'power'
+          extra_artifacts: True
+
+  SpectrumArrayMultitaper:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: BasicPrep1.fif
+      - id: 1
+        function: spectrum_array
+        depends_on: [0]
+        args:
+          meeg: id.0
+          method: 'multitaper'
+          method_kwargs:
+            bandwidth : null
+            adaptive: False
+            low_bias: True
+            normalization: 'length'
+            remove_dc: True
+            output: 'power'
+          extra_artifacts: True
