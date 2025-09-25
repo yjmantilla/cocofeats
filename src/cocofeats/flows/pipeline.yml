@@ -104,3 +104,14 @@ FeatureDefinitions:
             remove_dc: True
             output: 'power'
           extra_artifacts: True
+
+  MEEGMetadata:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: SourceFile
+      - id: 1
+        function: extract_meeg_metadata
+        depends_on: [0]
+        args:
+          mne_object: id.0
