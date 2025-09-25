@@ -11,6 +11,26 @@ from . import register_feature
 
 log = get_logger(__name__)
 
+@register_feature
+def keep_channels(mne_object, channel_names, save=False) -> FeatureResult:
+    if isinstance(mne_object, (str, os.PathLike)):
+        mne_object = load_meeg(mne_object)
+        log.debug("keep_channels: loaded MNE object from file", input=mne_object)
+
+    mne_object = mne_object.copy().pick(channel_names)
+
+    if save:
+        writer = lambda path: mne_object.save(path, overwrite=True)
+    else:
+        writer = None
+
+    artifacts = {
+        ".fif": Artifact(item=mne_object, writer=writer)
+    }
+
+    out = FeatureResult(artifacts=artifacts)
+
+    return out
 
 @register_feature
 def basic_preprocessing(
@@ -22,9 +42,16 @@ def basic_preprocessing(
     extra_artifacts: bool = False,
 ) -> FeatureResult:
 
+    if isinstance(mne_object, FeatureResult):
+        if ".fif" in mne_object.artifacts:
+            mne_object = mne_object.artifacts[".fif"].item
+        else:
+            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
+
     if isinstance(mne_object, str | os.PathLike):
         mne_object = load_meeg(mne_object)
         log.debug("MNEReport: loaded MNE object from file", input=mne_object)
+
 
     mne_object = mne_object.copy()
 
