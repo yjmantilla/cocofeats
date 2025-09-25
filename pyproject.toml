@@ -36,7 +36,10 @@ dependencies = ["mne",
 "pydantic",
 "networkx",
 "antropy",
-"neurokit2"
+"neurokit2",
+"netCDF4",
+"xpublish",
+"imageio",
 ]
 
 [tool.hatch.metadata]
