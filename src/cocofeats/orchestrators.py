@@ -10,6 +10,8 @@ from cocofeats.utils import get_path
 from cocofeats.features import get_feature, list_features
 from cocofeats.flows import get_flow, list_flows
 from cocofeats.dag import run_flow
+from cocofeats.loaders import load_configuration
+from cocofeats.flows.pipeline import register_flows_from_dict
 import pandas as pd
 log = get_logger(__name__)
 
@@ -42,6 +44,13 @@ def iterate_feature_pipeline(
     """
     log.debug("iterate_call_pipeline: called", pipeline_configuration=pipeline_configuration)
 
+
+    config_dict = load_configuration(pipeline_configuration) if isinstance(pipeline_configuration, str) else pipeline_configuration
+
+    if "FeatureDefinitions" in config_dict:
+        register_flows_from_dict(config_dict)
+    else:
+        log.warning("No 'FeatureDefinitions' found in the configuration. Skipping flow registration.")
     datasets_configs, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(
         pipeline_configuration
     )
@@ -103,12 +112,13 @@ def iterate_feature_pipeline(
             elif feature.name in list_flows():
 
                 result = run_flow(feature.definition, feature.name, file_path, **extra_kwargs, dry_run=dry_run)
-                res = {}
-                res['index'] = index
-                res['dataset'] = dataset_name
-                res['file_path'] = file_path
-                res.update(result)
                 if dry_run:
+
+                    res = {}
+                    res['index'] = index
+                    res['dataset'] = dataset_name
+                    res['file_path'] = file_path
+                    res.update(result)
                     log.info("Dry run:", **res)
                     dry_run_collection.append(res)
 
@@ -136,88 +146,30 @@ def iterate_feature_pipeline(
         return pd.DataFrame(dry_run_collection)
 
 if __name__ == "__main__":
-    from cocofeats.datasets import generate_dummy_dataset
+    # Parse args and run iterate_feature_pipeline
+    import argparse
+    parser = argparse.ArgumentParser(description="Iterate feature pipeline.")
+    parser.add_argument("config", type=str, help="Path to the pipeline configuration file (YAML or JSON).")
+    parser.add_argument("--max_files_per_dataset", type=int, default=None, help="Maximum number of files to process per dataset.")
+    parser.add_argument("--dry_run", action="store_true", help="If set, perform a dry run without actual processing.")
+    parser.add_argument("--only_index", type=int, nargs='*', default=None, help="Only process files with these indices.")
+    parser.add_argument("--raise_on_error", action="store_true", help="If set, raise exceptions on errors instead of logging them.")
+    args = parser.parse_args()
 
-    dataset_1 = {
-        "PATTERN": "sub-%subject%/ses-%session%/sub-%subject%_ses-%session%_task-%task%_acq-%acquisition%_run-%run%",
-        "DATASET": "dataset1",
-        "NSUBS": 2,
-        "NSESSIONS": 2,
-        "NTASKS": 2,
-        "NACQS": 2,
-        "NRUNS": 2,
-        "PREFIXES": {"subject": "S", "session": "SE", "task": "T", "acquisition": "A", "run": "R"},
-        "ROOT": "_data/dataset1",
-    }
+    from cocofeats.loaders import load_configuration
+    pipeline_configuration = load_configuration(args.config)
 
-    dataset_2 = {
-        "PATTERN": "sub-%subject%/ses-%session%/sub-%subject%_ses-%session%_task-%task%_acq-%acquisition%_run-%run%",
-        "DATASET": "dataset2",
-        "NSUBS": 3,
-        "NSESSIONS": 1,
-        "NTASKS": 2,
-        "NACQS": 1,
-        "NRUNS": 2,
-        "PREFIXES": {"subject": "S", "session": "SE", "task": "T", "acquisition": "A", "run": "R"},
-        "ROOT": "_data/dataset2",
-    }
+    feature_list = pipeline_configuration.get("FeatureList", [])
+    if not feature_list:
+        log.error("No features specified in the pipeline configuration under 'FeatureList'. Exiting.")
+        exit(1)
 
-    generate_dummy_dataset(data_params=dataset_1)
-    generate_dummy_dataset(data_params=dataset_2)
-
-    datasets = {
-        "dataset_1": {
-            "name": "Dataset 1",
-            "file_pattern": "_data/dataset1/**/*.vhdr",
-            "derivatives_path": "_outputs/dataset1",
-            "extra_field": "extra_value",  # Example of an extra field
-        },
-        "dataset_2": {
-            "name": "Dataset 2",
-            "file_pattern": "_data/dataset2/**/*.vhdr",
-            "derivatives_path": "_outputs/dataset2",
-            "extra_field": "extra_value",  # Example of an extra field
-        },
-    }
-
-    pipeline_input = {
-        "datasets": datasets,
-        "mount_point": None,
-    }
-    files_per_dataset, all_files, common_roots = get_all_files_from_pipeline_configuration(
-        pipeline_input, max_files_per_dataset=None
-    )
-
-    print("Files per dataset:", files_per_dataset)
-    print("All files with indices:", all_files)
-    print("Common roots:", common_roots)
-
-    # Now run the feature extraction
-    from cocofeats.features import get_feature, list_features
-
-    print("Registered features:", list_features())
-
-    if False:
-        for feature in ["spectrum", "basic_preprocessing"]:
-            iterate_feature_pipeline(
-                pipeline_configuration=pipeline_input,
-                feature=get_feature(feature),
-                max_files_per_dataset=2,
-            )
-
-    # 1) Load and register flows
-    # 2) Use your existing iterate_feature_pipeline per flow name
-    from cocofeats.features import get_feature
-    from cocofeats.flows import get_flow
-
-    # "BasicPrep1", "CheckLineFrequency",
-    # "BasicPrep1", "CheckLineFrequency", "InterFeatureDependence",
-    for flow_name in ["SpectrumArrayWelch", "SpectrumArrayMultitaper",]:
-        df = iterate_feature_pipeline(
-            pipeline_configuration=pipeline_input,
-            feature=flow_name,  # the thin wrapper
-            max_files_per_dataset=None,
-            dry_run = False,
-            only_index = [3,5],
-            raise_on_error = True,
+    for feature in feature_list:
+        iterate_feature_pipeline(
+            pipeline_configuration=pipeline_configuration,
+            feature=feature,
+            max_files_per_dataset=args.max_files_per_dataset,
+            dry_run=args.dry_run,
+            only_index=args.only_index,
+            raise_on_error=args.raise_on_error,
         )
