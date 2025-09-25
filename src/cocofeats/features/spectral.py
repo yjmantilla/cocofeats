@@ -9,6 +9,7 @@ import xarray as xr
 from cocofeats.definitions import Artifact, FeatureResult
 from cocofeats.loaders import load_meeg
 from cocofeats.loggers import get_logger
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 from . import register_feature
 
@@ -55,6 +56,12 @@ def spectrum(
     dict
         A dictionary containing the power spectral density results, metadata, and artifacts (MNE Report).
     """
+
+    if isinstance(meeg, FeatureResult):
+        if ".fif" in meeg.artifacts:
+            meeg = meeg.artifacts[".fif"].item
+        else:
+            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
 
     if isinstance(meeg, str | os.PathLike):
         meeg = load_meeg(meeg)
@@ -122,6 +129,76 @@ def spectrum(
     return out
 
 
+import imageio
+import matplotlib.pyplot as plt
+
+
+def _make_gifs(psd_xarray: xr.DataArray) -> dict[str, Artifact]:
+    """
+    Generate GIFs depending on PSD dimensionality.
+    - (spaces, frequencies): one GIF across channels
+    - (epochs, spaces, frequencies): one GIF per channel across epochs
+
+    Each frame has the channel name (and epoch number if present).
+    """
+    artifacts: dict[str, Artifact] = {}
+
+    # Case 1: Only channels × freqs
+    if list(psd_xarray.dims) == ["spaces", "frequencies"]:
+        freqs = psd_xarray.coords["frequencies"].values
+        spaces = psd_xarray.coords["spaces"].values
+
+        frames = []
+        for i, ch in enumerate(spaces):
+            fig, ax = plt.subplots()
+            ax.plot(freqs, psd_xarray[i, :].values)
+            ax.set_title(f"Channel: {ch}")
+            ax.set_xlabel("Frequency (Hz)")
+            ax.set_ylabel("PSD")
+
+            canvas = FigureCanvas(fig)
+            canvas.draw()
+            frame = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+            frame = frame.reshape(canvas.get_width_height()[::-1] + (4,))
+            frame = frame[:, :, :3]  # keep RGB only
+            frames.append(frame)
+            plt.close(fig)
+
+        artifacts[".channels.gif"] = Artifact(
+            item=frames,
+            writer=lambda path, frames=frames: imageio.mimsave(path, frames, fps=2)
+        )
+
+    # Case 2: Epochs × Channels × Freqs
+    elif list(psd_xarray.dims) == ["epochs", "spaces", "frequencies"]:
+        freqs = psd_xarray.coords["frequencies"].values
+        spaces = psd_xarray.coords["spaces"].values
+        epochs = psd_xarray.coords["epochs"].values
+
+        for j, ch in enumerate(spaces):
+            frames = []
+            for i, ep in enumerate(epochs):
+                fig, ax = plt.subplots()
+                ax.plot(freqs, psd_xarray[i, j, :].values)
+                ax.set_title(f"Channel: {ch}, Epoch: {ep}")
+                ax.set_xlabel("Frequency (Hz)")
+                ax.set_ylabel("PSD")
+
+                canvas = FigureCanvas(fig)
+                canvas.draw()
+                frame = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+                frame = frame.reshape(canvas.get_width_height()[::-1] + (4,))
+                frame = frame[:, :, :3]  # keep RGB only
+                frames.append(frame)
+                plt.close(fig)
+
+            artifacts[f".{ch}.gif"] = Artifact(
+                item=frames,
+                writer=lambda path, frames=frames: imageio.mimsave(path, frames, fps=2)
+            )
+
+    return artifacts
+
 @register_feature
 def spectrum_array(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
@@ -155,6 +232,11 @@ def spectrum_array(
 
     method_kwargs = dict(method_kwargs or {})
 
+    if isinstance(meeg, FeatureResult):
+        if ".fif" in meeg.artifacts:
+            meeg = meeg.artifacts[".fif"].item
+        else:
+            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
 
     if isinstance(meeg, str | os.PathLike):
         meeg = load_meeg(meeg)
@@ -325,7 +407,8 @@ def spectrum_array(
     psd_xarray.attrs["metadata"] = json.dumps(metadata, indent=2, default=_json_safe)
 
     artifacts: dict[str, Artifact] = {
-        ".nc": Artifact(item=psd_xarray, writer=lambda path: psd_xarray.to_netcdf(path)),
+        ".nc": Artifact(item=psd_xarray, writer=lambda path: psd_xarray.to_netcdf(path,engine='netcdf4',format='NETCDF4')),
+        #".zarr": Artifact(item=psd_xarray, writer=lambda path: psd_xarray.to_zarr(path)),
     }
     if weights_xarray is not None:
         artifacts[".weights.nc"] = Artifact(
@@ -335,6 +418,9 @@ def spectrum_array(
     # Support visualization if dimension are 2 (spaces, frequencies) or 3 (epochs, spaces, frequencies)
 
     if extra_artifacts:
+        #gif_artifacts = _make_gifs(psd_xarray)
+        #artifacts.update(gif_artifacts)
+
         report = mne.Report(title="Spectrum", verbose="error")
         if len(psd_dims) == 2 and psd_dims == ["spaces", "frequencies"]:
             fig = psd_xarray.plot(
@@ -345,6 +431,7 @@ def spectrum_array(
                 aspect="auto",
             ).figure
             report.add_figure(fig, title="Spectrum")
+
         elif len(psd_dims) == 3 and psd_dims == ["epochs", "spaces", "frequencies"]:
             mean_over_epochs = psd_xarray.mean(dim="epochs")
             fig = mean_over_epochs.plot(
