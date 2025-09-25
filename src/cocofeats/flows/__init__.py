@@ -5,6 +5,7 @@ import sys
 from collections.abc import Callable, Iterable
 from importlib import import_module
 from typing import Any
+from cocofeats.loggers import get_logger
 
 FlowCallable = Callable[..., Any]
 
@@ -31,6 +32,8 @@ class FlowEntry:
 
 # Global registry
 _FLOW_REGISTRY: dict[str, FlowEntry] = {}
+
+log = get_logger(__name__)
 
 
 # -------------------------
@@ -63,6 +66,8 @@ def register_flow(
         key = name or target.__name__
         if not override and key in _FLOW_REGISTRY and _FLOW_REGISTRY[key].func is not target:
             raise ValueError(f"Flow '{key}' is already registered")
+        elif override and key in _FLOW_REGISTRY:
+            log.info(f"Overriding existing flow registration for '{key}'")
 
         _FLOW_REGISTRY[key] = FlowEntry(key, target, definition)
         return target
