@@ -3,7 +3,7 @@ import glob
 import inspect
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Set
 
 import yaml
 
@@ -37,6 +37,25 @@ def _resolve_refs(obj: Any, store: dict[int, Any]) -> Any:
     return obj
 
 
+def _collect_id_refs(obj: Any) -> Set[int]:
+    """Find every `id.<n>` string embedded in the given object."""
+    refs: Set[int] = set()
+    if isinstance(obj, str):
+        match = _ID_REF.match(obj)
+        if match:
+            refs.add(int(match.group(1)))
+        return refs
+    if isinstance(obj, dict):
+        for value in obj.values():
+            refs.update(_collect_id_refs(value))
+        return refs
+    if isinstance(obj, (list, tuple, set)):
+        for value in obj:
+            refs.update(_collect_id_refs(value))
+        return refs
+    return refs
+
+
 def _unwrap_for_arg(val: Any, argname: str) -> Any:
     """Heuristic: unwrap FeatureResult when passing to a primitive function."""
     if isinstance(val, FeatureResult):
@@ -60,12 +79,20 @@ def _prep_kwargs(raw_kwargs: dict[str, Any], store: dict[int, Any]) -> dict[str,
 
 def _topo_order(flow: list[dict[str, Any]]) -> list[int]:
     steps = {s["id"]: s for s in flow}
+    dependencies: dict[int, Set[int]] = {}
+    for sid, step in steps.items():
+        declared = step.get("depends_on") or []
+        deps = set(declared)
+        if "args" in step:
+            deps.update(_collect_id_refs(step.get("args")))
+        deps.discard(sid)
+        dependencies[sid] = deps
     seen, order = set(), []
 
     def visit(i: int):
         if i in seen:
             return
-        for d in steps[i].get("depends_on", []) or []:
+        for d in sorted(dependencies.get(i, set())):
             visit(d)
         seen.add(i)
         order.append(i)

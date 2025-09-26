@@ -7,7 +7,6 @@ FeatureDefinitions:
         feature: SourceFile
       - id: 1
         function: spectrum
-        depends_on: [0]
         args:
           meeg: id.0
           compute_psd_kwargs:
@@ -23,7 +22,6 @@ FeatureDefinitions:
         feature: SourceFile
       - id: 1
         function: basic_preprocessing
-        depends_on: [0]
         args:
           mne_object: id.0
           resample: 250              # resample to 250 Hz
@@ -59,7 +57,6 @@ FeatureDefinitions:
         feature: CheckLineFrequency.nc
       - id: 3
         function: dummy
-        depends_on: [0, 1]
         args:
           param1: id.0
           param2: id.1
@@ -71,7 +68,6 @@ FeatureDefinitions:
         feature: BasicPrep1.fif
       - id: 1
         function: spectrum_array
-        depends_on: [0]
         args:
           meeg: id.0
           method: 'welch'
@@ -92,7 +88,6 @@ FeatureDefinitions:
         feature: BasicPrep1.fif
       - id: 1
         function: spectrum_array
-        depends_on: [0]
         args:
           meeg: id.0
           method: 'multitaper'
@@ -112,6 +107,5 @@ FeatureDefinitions:
         feature: SourceFile
       - id: 1
         function: extract_meeg_metadata
-        depends_on: [0]
         args:
           mne_object: id.0
