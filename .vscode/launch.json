@@ -19,7 +19,7 @@
       "console": "integratedTerminal",
       "justMyCode": false,
       "args": [
-        "/home/user/code/cocofeats/data/pipeline_psycho.yml",
+        "/home/user/code/cocofeats/_data/psychostimulants/pipeline_psycho.yml",
         //"--max_files_per_dataset", "5",
         //  "--dry_run",
         // "--only_index", "0", "3"
