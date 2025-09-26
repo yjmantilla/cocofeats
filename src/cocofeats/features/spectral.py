@@ -1,5 +1,6 @@
 import json
 import os
+from collections.abc import Mapping
 from typing import Any
 
 import mne
@@ -16,7 +17,37 @@ from cocofeats.writers import _json_safe
 
 log = get_logger(__name__)
 
-from cocofeats.writers import _json_safe
+
+DEFAULT_BANDS: dict[str, tuple[float, float]] = {
+    "delta": (1.0, 4.0),
+    "theta": (4.0, 8.0),
+    "alpha": (8.0, 13.0),
+    "beta": (13.0, 30.0),
+    "pre_alpha": (5.5, 8.0),
+    "slow_theta": (4.0, 5.5),
+}
+
+
+def _resolve_psd_dataarray(
+    psd_like: FeatureResult | xr.DataArray | str | os.PathLike[str]
+) -> xr.DataArray:
+    if isinstance(psd_like, xr.DataArray):
+        return psd_like
+
+    if isinstance(psd_like, FeatureResult):
+        if ".nc" not in psd_like.artifacts:
+            raise ValueError("FeatureResult does not contain a .nc artifact to process.")
+        candidate = psd_like.artifacts[".nc"].item
+        if isinstance(candidate, xr.DataArray):
+            return candidate
+        if isinstance(candidate, (str, os.PathLike)):
+            return xr.open_dataarray(candidate)
+        raise ValueError("Unsupported artifact payload for .nc in FeatureResult.")
+
+    if isinstance(psd_like, (str, os.PathLike)):
+        return xr.open_dataarray(psd_like)
+
+    raise ValueError("Input must be a FeatureResult, xarray.DataArray, or path to netCDF artifact.")
 
 
 @register_feature
@@ -183,6 +214,7 @@ def _make_gifs(psd_xarray: xr.DataArray) -> dict[str, Artifact]:
             )
 
     return artifacts
+
 
 @register_feature
 def spectrum_array(
@@ -435,5 +467,121 @@ def spectrum_array(
         artifacts[".report.html"] = Artifact(
             item=report, writer=lambda path: report.save(path, overwrite=True, open_browser=False)
         )
+
+    return FeatureResult(artifacts=artifacts)
+
+
+@register_feature
+def bandpower(
+    psd_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    *,
+    bands: Mapping[str, tuple[float, float]] | None = None,
+    freq_dim: str = "frequencies",
+    relative: bool = False,
+) -> FeatureResult:
+    """Compute absolute or relative band power from a PSD ``xarray.DataArray``.
+
+    Parameters
+    ----------
+    psd_like : FeatureResult | xarray.DataArray | path-like
+        Output from ``spectrum``/``spectrum_array`` or a compatible ``xarray`` artifact.
+    bands : mapping, optional
+        Frequency bands as ``{"label": (low, high)}``. If omitted ``DEFAULT_BANDS`` is used.
+    freq_dim : str, optional
+        Name of the frequency dimension in the PSD. Defaults to ``"frequencies"``.
+    relative : bool, optional
+        If ``True`` each band power is normalised by the total power across ``freq_dim``.
+
+    Returns
+    -------
+    FeatureResult
+        ``.nc`` artifact whose ``freq_dim`` is replaced by ``freqbands`` containing band powers.
+    """
+
+    psd_xr = _resolve_psd_dataarray(psd_like)
+
+    if freq_dim not in psd_xr.dims:
+        raise ValueError(f"Frequency dimension '{freq_dim}' not present in input dims: {psd_xr.dims}")
+
+    bands_dict = dict(bands or DEFAULT_BANDS)
+    if not bands_dict:
+        raise ValueError("At least one frequency band must be provided.")
+
+    freqs = psd_xr.coords.get(freq_dim)
+    if freqs is None:
+        raise ValueError(f"Frequency dimension '{freq_dim}' must have coordinate values.")
+
+    if freqs.ndim != 1:
+        raise ValueError("Frequency coordinate must be one-dimensional.")
+
+    freq_axis = psd_xr.get_axis_num(freq_dim)
+
+    total_power = psd_xr.integrate(freq_dim)
+
+    band_arrays: list[xr.DataArray] = []
+    band_edges: list[tuple[float, float]] = []
+
+    for label, band_range in bands_dict.items():
+        if len(band_range) != 2:
+            raise ValueError(f"Band '{label}' must be a (low, high) pair.")
+
+        low, high = map(float, band_range)
+        if not np.isfinite(low) or not np.isfinite(high): #TODO: maybe we should allow inf? (as get everything below or above a threshold)
+            raise ValueError(f"Band '{label}' has non-finite boundaries: {band_range}.")
+        if high <= low:
+            raise ValueError(f"Band '{label}' must have high > low (got {band_range}).")
+
+        band_slice = psd_xr.sel({freq_dim: slice(low, high)})
+        if band_slice.sizes.get(freq_dim, 0) == 0:
+            band_power = xr.full_like(total_power, np.nan)
+        else:
+            band_power = band_slice.integrate(freq_dim)
+
+        # Insert the new freqbands dimension where the original frequencies lived
+        band_power = band_power.expand_dims({"freqbands": [label]}, axis=freq_axis)
+        band_arrays.append(band_power)
+        band_edges.append((low, high))
+
+    band_power_xr = xr.concat(band_arrays, dim="freqbands")
+
+    # Restore dimension order so freqbands replaces the frequency dimension position
+    original_dims = list(psd_xr.dims)
+    target_dims = ["freqbands" if dim == freq_dim else dim for dim in original_dims]
+    band_power_xr = band_power_xr.transpose(*target_dims)
+
+    band_power_xr = band_power_xr.assign_coords(
+        freqbands=list(bands_dict),
+    )
+    band_power_xr.coords["freqband_low"] = ("freqbands", [edge[0] for edge in band_edges])
+    band_power_xr.coords["freqband_high"] = ("freqbands", [edge[1] for edge in band_edges])
+
+    if relative:
+        denom = total_power
+        with np.errstate(divide="ignore", invalid="ignore"):
+            normalised = band_power_xr / denom
+        band_power_xr = xr.where(denom == 0, np.nan, normalised)
+
+    metadata: dict[str, Any] = {
+        "bands": {
+            label: {"low": float(low), "high": float(high)} for label, (low, high) in bands_dict.items()
+        },
+        "relative": relative,
+        "freq_dim": freq_dim,
+        "input_dims": list(psd_xr.dims),
+        "input_shape": [int(psd_xr.sizes[dim]) for dim in psd_xr.dims],
+        "output_dims": list(band_power_xr.dims),
+        "output_shape": [int(band_power_xr.sizes[dim]) for dim in band_power_xr.dims],
+        "integration": "xarray.DataArray.integrate (trapezoidal)",
+    }
+
+    source_metadata = psd_xr.attrs.get("metadata")
+    if source_metadata is not None:
+        metadata["source_metadata"] = source_metadata
+
+    band_power_xr.attrs["metadata"] = json.dumps(metadata, indent=2, default=_json_safe)
+
+    artifacts = {
+        ".nc": Artifact(item=band_power_xr, writer=lambda path: band_power_xr.to_netcdf(path)),
+    }
 
     return FeatureResult(artifacts=artifacts)
