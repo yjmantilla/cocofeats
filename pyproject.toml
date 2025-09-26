@@ -42,6 +42,7 @@ dependencies = ["mne",
 "imageio",
 "plotly",
 "dash",
+"fooof",
 ]
 
 [tool.hatch.metadata]
