@@ -44,7 +44,7 @@ htmlcov/
 .ruff_cache/
 
 # IDEs and editors
-.vscode/
+#.vscode/
 .idea/
 
 # Sphinx documentation
