@@ -1,6 +1,7 @@
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from itertools import permutations
 from typing import Any
 
 import mne
@@ -23,8 +24,8 @@ DEFAULT_BANDS: dict[str, tuple[float, float]] = {
     "theta": (4.0, 8.0),
     "alpha": (8.0, 13.0),
     "beta": (13.0, 30.0),
-    "pre_alpha": (5.5, 8.0),
-    "slow_theta": (4.0, 5.5),
+    "preAlpha": (5.5, 8.0),
+    "slowTheta": (4.0, 5.5),
 }
 
 
@@ -582,6 +583,124 @@ def bandpower(
 
     artifacts = {
         ".nc": Artifact(item=band_power_xr, writer=lambda path: band_power_xr.to_netcdf(path)),
+    }
+
+    return FeatureResult(artifacts=artifacts)
+
+
+@register_feature
+def band_ratios(
+    bandpower_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    *,
+    freqband_dim: str = "freqbands",
+    combinations: Sequence[tuple[str, str]] | None = None,
+    eps: float | None = None,
+) -> FeatureResult:
+    """Compute ordered band power ratios from an ``xarray`` bandpower artifact.
+
+    Parameters
+    ----------
+    bandpower_like : FeatureResult | xarray.DataArray | path-like
+        Output from :func:`bandpower` or a compatible ``xarray`` artifact that
+        exposes a ``freqbands`` dimension.
+    freqband_dim : str, optional
+        Name of the dimension containing band labels. Defaults to ``"freqbands"``.
+    combinations : sequence of tuple[str, str], optional
+        Explicit ordered band pairs ``(numerator, denominator)``. If omitted,
+        all permutations of length 2 across the available band labels are used.
+    eps : float, optional
+        Minimum absolute denominator value. Values with ``|denominator| <= eps``
+        yield ``NaN`` to avoid unstable ratios. Defaults to machine epsilon for
+        the bandpower dtype.
+
+    Returns
+    -------
+    FeatureResult
+        ``.nc`` artifact with ``freqband_dim`` replaced by ``freqbandPairs``.
+    """
+
+    band_da = _resolve_psd_dataarray(bandpower_like)
+
+    if freqband_dim not in band_da.dims:
+        raise ValueError(
+            f"Frequency band dimension '{freqband_dim}' not present in input dims: {band_da.dims}"
+        )
+
+    labels = band_da.coords.get(freqband_dim)
+    if labels is None:
+        raise ValueError(f"Band dimension '{freqband_dim}' must have coordinate labels.")
+
+    band_labels = [str(label) for label in labels.values.tolist()]
+    if combinations is None:
+        band_pairs = list(permutations(band_labels, 2))
+    else:
+        band_pairs = [(str(top), str(bottom)) for top, bottom in combinations]
+
+    if not band_pairs:
+        raise ValueError("At least one band pair must be provided.")
+
+    freqband_axis = band_da.get_axis_num(freqband_dim)
+
+    if eps is None:
+        try:
+            eps = float(np.finfo(np.asarray(0.0, dtype=band_da.dtype).dtype).eps)
+        except (TypeError, ValueError):
+            eps = float(np.finfo(np.float64).eps)
+    else:
+        eps = float(eps)
+
+    ratio_arrays: list[xr.DataArray] = []
+    tops: list[str] = []
+    bottoms: list[str] = []
+    pair_labels: list[str] = []
+
+    for top, bottom in band_pairs:
+        numerator = band_da.sel({freqband_dim: top})
+        denominator = band_da.sel({freqband_dim: bottom})
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = numerator / denominator
+
+        small_denom = np.abs(denominator) <= eps
+        ratio = xr.where(small_denom, np.nan, ratio)
+
+        ratio = ratio.expand_dims({"freqbandPairs": [f"{top}/{bottom}"]}, axis=freqband_axis)
+        ratio_arrays.append(ratio)
+        tops.append(top)
+        bottoms.append(bottom)
+        pair_labels.append(f"{top}/{bottom}")
+
+    ratio_xr = xr.concat(ratio_arrays, dim="freqbandPairs")
+
+    original_dims = list(band_da.dims)
+    target_dims = ["freqbandPairs" if dim == freqband_dim else dim for dim in original_dims]
+    ratio_xr = ratio_xr.transpose(*target_dims)
+
+    ratio_xr = ratio_xr.assign_coords(freqbandPairs=pair_labels)
+    ratio_xr.coords["freqband_top"] = ("freqbandPairs", tops)
+    ratio_xr.coords["freqband_bottom"] = ("freqbandPairs", bottoms)
+
+    metadata: dict[str, Any] = {
+        "pairs": [
+            {"label": pair_label, "top": top, "bottom": bottom}
+            for pair_label, top, bottom in zip(pair_labels, tops, bottoms, strict=True)
+        ],
+        "freqband_dim": freqband_dim,
+        "eps": eps,
+        "input_dims": list(band_da.dims),
+        "input_shape": [int(band_da.sizes[dim]) for dim in band_da.dims],
+        "output_dims": list(ratio_xr.dims),
+        "output_shape": [int(ratio_xr.sizes[dim]) for dim in ratio_xr.dims],
+    }
+
+    source_metadata = band_da.attrs.get("metadata")
+    if source_metadata is not None:
+        metadata["source_metadata"] = source_metadata
+
+    ratio_xr.attrs["metadata"] = json.dumps(metadata, indent=2, default=_json_safe)
+
+    artifacts = {
+        ".nc": Artifact(item=ratio_xr, writer=lambda path: ratio_xr.to_netcdf(path)),
     }
 
     return FeatureResult(artifacts=artifacts)

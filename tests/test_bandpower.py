@@ -6,7 +6,7 @@ import xarray as xr
 from numpy.testing import assert_allclose
 
 from cocofeats.definitions import Artifact, FeatureResult
-from cocofeats.features.spectral import bandpower
+from cocofeats.features.spectral import bandpower, band_ratios
 
 
 def _make_psd() -> xr.DataArray:
@@ -59,3 +59,40 @@ def test_bandpower_accepts_featureresult_input() -> None:
 
     assert band_da.shape == (2, 3, 1)
     assert "metadata" in band_da.attrs
+
+
+def test_band_ratios_default_permutations() -> None:
+    psd = _make_psd()
+    bands = {"low": (0.0, 5.0), "high": (5.0, 10.0), "mid": (2.0, 7.0)}
+    band_feature = bandpower(psd, bands=bands)
+    ratio_feature = band_ratios(band_feature)
+    ratio_da = ratio_feature.artifacts[".nc"].item
+
+    assert isinstance(ratio_da, xr.DataArray)
+    assert ratio_da.dims == ("epochs", "spaces", "freqband_pairs")
+    assert len(ratio_da.coords["freqband_pairs"].values) == 6
+    assert "low/high" in ratio_da.coords["freqband_pairs"].values
+    assert_allclose(ratio_da.sel(freqband_pairs="low/high").values, 1.0)
+    assert_allclose(ratio_da.sel(freqband_pairs="mid/low").values, 1.0)
+
+
+def test_band_ratios_handles_small_denominator() -> None:
+    band_da = xr.DataArray(
+        data=np.array([[[1.0, 0.0]]]),
+        dims=("epochs", "spaces", "freqbands"),
+        coords={
+            "epochs": [0],
+            "spaces": ["A"],
+            "freqbands": ["top", "zero"],
+        },
+    )
+    feature_input = FeatureResult(
+        artifacts={
+            ".nc": Artifact(item=band_da, writer=lambda path: band_da.to_netcdf(path)),
+        }
+    )
+    ratio_feature = band_ratios(feature_input, eps=1e-6)
+    ratio_da = ratio_feature.artifacts[".nc"].item
+
+    assert np.isnan(ratio_da.sel(freqband_pairs="top/zero").values).all()
+    assert_allclose(ratio_da.sel(freqband_pairs="zero/top").values, 0.0)
