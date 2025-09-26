@@ -40,6 +40,8 @@ dependencies = ["mne",
 "netCDF4",
 "xpublish",
 "imageio",
+"plotly",
+"dash",
 ]
 
 [tool.hatch.metadata]
