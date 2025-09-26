@@ -48,9 +48,9 @@ app.layout = html.Div([
     html.Label("Y-axis dimension (optional)"),
     dcc.Dropdown(
         id="y-dim",
-        options=[{"label": d, "value": d} for d in dims],
-        value=None,
-        clearable=True
+        options=[{"label": "None", "value": "none"}] + [{"label": d, "value": d} for d in dims],
+        value="none",
+        clearable=False
     ),
 
     html.Label("Plot type"),
@@ -140,7 +140,8 @@ def apply_transform(data, transform):
 def update_plot(*vals):
     values = vals[:len(dims)]
     xdim, ydim, plot_type, x_transform, y_transform = vals[len(dims):]
-
+    if ydim == "none":
+        ydim = None
     # freeze all dims except xdim, ydim
     slice_dict = {dim: val for dim, val in zip(dims, values) if dim not in (xdim, ydim)}
     arr = safe_sel(ds, slice_dict)
