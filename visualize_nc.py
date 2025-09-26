@@ -56,6 +56,32 @@ app.layout = html.Div([
         clearable=False
     ),
 
+    html.Label("X-axis transform"),
+    dcc.Dropdown(
+        id="x-transform",
+        options=[
+            {"label": "None", "value": "none"},
+            {"label": "Log10", "value": "log10"},
+            {"label": "Square", "value": "square"},
+            {"label": "Log20", "value": "log20"}
+        ],
+        value="none",
+        clearable=False
+    ),
+
+    html.Label("Y-axis transform"),
+    dcc.Dropdown(
+        id="y-transform",
+        options=[
+            {"label": "None", "value": "none"},
+            {"label": "Log10", "value": "log10"},
+            {"label": "Square", "value": "square"},
+            {"label": "Log20", "value": "log20"}
+        ],
+        value="none",
+        clearable=False
+    ),
+
     dcc.Graph(id="plot"),
 
     html.H3("Debug info"),
@@ -86,34 +112,48 @@ def safe_sel(arr, slice_dict, xdim):
             arr = arr.sel({dim: sel_dict[dim]})
     return arr
 
+def apply_transform(data, transform):
+    """Apply simple element-wise transforms."""
+    if transform == "log10":
+        # avoid log of non-positive values
+        return np.log10(np.where(data > 0, data, np.nan))
+    elif transform == "square":
+        return np.square(data)
+    elif transform == "log20":
+        return np.log10(np.where(data**2 > 0, data**2, np.nan)) # log20 = log10(x^2)
+    return data
+
 @app.callback(
     [Output("plot", "figure"),
      Output("debug-output", "children")],
     [Input(f"dropdown-{dim}", "value") for dim in dims] +
     [Input("x-dim", "value"),
-     Input("plot-type", "value")]
+     Input("plot-type", "value"),
+     Input("x-transform", "value"),
+     Input("y-transform", "value")]
 )
 def update_plot(*vals):
-    slice_dict = {dim: val for dim, val in zip(dims, vals[:-2]) if dim != vals[-2]}
-    xdim = vals[-2]
-    plot_type = vals[-1]
+    slice_dict = {dim: val for dim, val in zip(dims, vals[:-4]) if dim != vals[-4]}
+    xdim = vals[-4]
+    plot_type = vals[-3]
+    x_transform = vals[-2]
+    y_transform = vals[-1]
 
     # Use safe selection
     arr = safe_sel(ds, slice_dict, xdim)
 
-    # Terminal debug
-    print(f"Selected slice: {slice_dict}, xdim={xdim}, plot_type={plot_type}")
-    print(f"arr shape: {arr.shape}, dims: {arr.dims}")
-
     fig = go.Figure()
 
     def add_trace(x, y, name=None):
+        x_t = apply_transform(np.array(x), x_transform)
+        y_t = apply_transform(np.array(y), y_transform)
+
         if plot_type == "line":
-            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=name))
+            fig.add_trace(go.Scatter(x=x_t, y=y_t, mode="lines", name=name))
         elif plot_type == "scatter":
-            fig.add_trace(go.Scatter(x=x, y=y, mode="markers", name=name))
+            fig.add_trace(go.Scatter(x=x_t, y=y_t, mode="markers", name=name))
         elif plot_type == "bar":
-            fig.add_trace(go.Bar(x=x, y=y, name=name))
+            fig.add_trace(go.Bar(x=x_t, y=y_t, name=name))
 
     if arr.ndim == 0:
         fig.add_annotation(text=f"Scalar value: {arr.item()}", x=0.5, y=0.5, showarrow=False)
@@ -129,6 +169,8 @@ def update_plot(*vals):
         "slice_dict": {k: str(v) for k, v in slice_dict.items()},
         "xdim": str(xdim),
         "plot_type": plot_type,
+        "x_transform": x_transform,
+        "y_transform": y_transform,
         "arr_shape": tuple(int(x) for x in arr.shape),
         "arr_dims": [str(d) for d in arr.dims]
     }
