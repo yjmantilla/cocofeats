@@ -7,9 +7,7 @@ import json
 import numpy as np
 
 # ---------- Load Data ----------
-# filename = sys.argv[1]   # <--- uncomment to accept from command line
-filename = '_outputs/psychostimulants/sub-113_ses-01_task-RESTING_run-01_eeg.vhdr@SpectrumArrayMultitaper5seg.nc'
-#sub-113_ses-01_task-RESTING_run-01_eeg.vhdr@SpectrumArrayWelchEpochsAverage5seg.nc'
+filename = sys.argv[1]   # <--- uncomment to accept from command line
 
 ds = xr.open_dataarray(filename)
 
@@ -187,7 +185,10 @@ def update_plot(*vals):
         "x_transform": x_transform,
         "y_transform": y_transform,
         "arr_shape": tuple(int(x) for x in arr.shape),
-        "arr_dims": [str(d) for d in arr.dims]
+        "arr_dims": [str(d) for d in arr.dims],
+        "metadata": {k: str(v) for k, v in arr.attrs.items()},
+        "coords": {k: str(v.values) for k, v in arr.coords.items()},
+        "dimensions": {k: str(v) for k, v in arr.sizes.items()},
     }
 
     return fig, json.dumps(debug_info, indent=2)
