@@ -12,26 +12,11 @@ from cocofeats.loggers import get_logger
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 from . import register_feature
+from cocofeats.writers import _json_safe
 
 log = get_logger(__name__)
 
-
-def _json_safe(value: Any) -> Any:
-    """Return a JSON-serialisable representation of ``value``."""
-
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    if isinstance(value, dict):
-        return {str(key): _json_safe(sub_value) for key, sub_value in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_json_safe(item) for item in value]
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):  # NumPy scalars
-        return value.item()
-    if isinstance(value, xr.DataArray):
-        return value.to_dict()
-    return repr(value)
+from cocofeats.writers import _json_safe
 
 
 @register_feature

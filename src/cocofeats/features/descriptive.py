@@ -7,26 +7,11 @@ from cocofeats.loaders import load_meeg
 from cocofeats.loggers import get_logger
 from . import register_feature
 
+from cocofeats.writers import _json_safe
+
 log = get_logger(__name__)
 
 
-import json
-import numpy as np
-
-def _json_safe(obj):
-    """Recursively convert numpy types to native Python types."""
-    if isinstance(obj, (np.integer,)):
-        return int(obj)
-    elif isinstance(obj, (np.floating,)):
-        return float(obj)
-    elif isinstance(obj, (np.ndarray,)):
-        return obj.tolist()
-    elif isinstance(obj, (list, tuple)):
-        return [_json_safe(x) for x in obj]
-    elif isinstance(obj, dict):
-        return {k: _json_safe(v) for k, v in obj.items()}
-    else:
-        return obj
 
 @register_feature
 def extract_meeg_metadata(mne_object) -> FeatureResult:
