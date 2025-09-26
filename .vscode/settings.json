@@ -1,0 +1,7 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.pythonProjects": [],
+    "python.terminal.activateEnvironment": true,
+    "python.useEnvironmentsExtension": false,
+    "python.terminal.activateEnvInCurrentTerminal": true
+}

@@ -1,0 +1,30 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python Debugger: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+    {
+      "name": "Python: iterate_feature_pipeline",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/cocofeats/orchestrators.py",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "args": [
+        "/home/user/code/cocofeats/data/pipeline_psycho.yml",
+        //"--max_files_per_dataset", "5",
+        //  "--dry_run",
+        // "--only_index", "0", "3"
+      ],
+    }
+
+    ],
+}
