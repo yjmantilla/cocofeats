@@ -76,6 +76,7 @@ def _resolve_eval_strings(value: Any) -> Any:
 def spectrum(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
     compute_psd_kwargs: dict[str, Any] | None = None,
+    extra_artifacts: bool = False,
 ) -> FeatureResult:
     """
     Compute the power spectral density of M/EEG data.
@@ -86,7 +87,8 @@ def spectrum(
         The M/EEG data to analyze. Can be raw data or epochs.
     compute_psd_kwargs : dict, optional
         Additional keyword arguments to pass to `mne.compute_psd`.
-
+    extra_artifacts : bool, optional
+        Whether to generate extra artifacts (MNE Report). Default is True.
     Returns
     -------
     dict
@@ -148,7 +150,18 @@ def spectrum(
 
     this_xarray.attrs["metadata"] = json.dumps(this_metadata, indent=2)
 
+    # Also add metadata to the report
+    if extra_artifacts:
+        extra_artifact.item.add_html(
+            f"<pre>{json.dumps(this_metadata, indent=2)}</pre>",
+            title="Metadata",
+            section="Metadata",
+        )
+
     artifacts = {".nc": Artifact(item=this_xarray, writer=lambda path: this_xarray.to_netcdf(path))}
+
+    if extra_artifacts:
+        artifacts[".report.html"] = extra_artifact
 
     out = FeatureResult(artifacts=artifacts)
     return out
