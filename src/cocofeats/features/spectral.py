@@ -72,42 +72,6 @@ def _resolve_eval_strings(value: Any) -> Any:
     return value
 
 
-def _generate_aperiodic(freqs: np.ndarray, params: Sequence[float], mode: str) -> np.ndarray:
-    """Return the log10 aperiodic fit evaluated on ``freqs``."""
-
-    freqs = np.asarray(freqs, dtype=float)
-    if mode == "knee":
-        if len(params) != 3:
-            raise ValueError("Knee mode expects three aperiodic parameters (offset, knee, exponent).")
-        offset, knee, exponent = (float(params[0]), float(params[1]), float(params[2]))
-        if knee < 0:
-            raise ValueError("Knee parameter must be non-negative.")
-        return offset - np.log10(knee + np.power(freqs, exponent))
-
-    if len(params) != 2:
-        raise ValueError("Fixed mode expects two aperiodic parameters (offset, exponent).")
-    offset, exponent = (float(params[0]), float(params[1]))
-    return offset - exponent * np.log10(freqs)
-
-
-def _generate_periodic(freqs: np.ndarray, peak_params: Sequence[Sequence[float]]) -> np.ndarray:
-    """Return the summed peak model in log10 space for the provided ``peak_params``."""
-
-    freqs = np.asarray(freqs, dtype=float)
-    total = np.zeros_like(freqs, dtype=float)
-    for peak in peak_params or []:
-        if peak is None or len(peak) != 3:
-            continue
-        center, amplitude, bandwidth = map(float, peak)
-        if np.isnan(center) or np.isnan(amplitude) or np.isnan(bandwidth):
-            continue
-        if bandwidth <= 0:
-            continue
-        std = bandwidth / 2.0
-        total += amplitude * np.exp(-((freqs - center) ** 2) / (2.0 * std**2))
-    return total
-
-
 @register_feature
 def spectrum(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
