@@ -411,8 +411,9 @@ def fooof(
     Returns
     -------
     FeatureResult
-        ``.fooof.nc`` artifact with JSON serialisations of each fitted model and
-        optionally a ``.fooof_timings.nc`` artifact with execution times.
+        ``.nc`` artifact containing an ``xarray.Dataset`` with the FOOOF
+        payloads stored under the ``fooof`` variable and, when requested,
+        timings under ``timings``.
     """
 
     psd_xr = _resolve_psd_dataarray(psd_like)
@@ -564,7 +565,7 @@ def fooof(
         coords = {}
 
     result_array = fooof_payloads.reshape(result_shape)
-    fooof_xr = xr.DataArray(result_array, dims=other_dims, coords=coords, name="fooof_json")
+    fooof_xr = xr.DataArray(result_array, dims=other_dims, coords=coords, name="fooof")
 
     metadata: dict[str, Any] = {
         "freq_dim": freq_dim,
@@ -592,14 +593,10 @@ def fooof(
     if source_metadata is not None:
         metadata["source_metadata"] = source_metadata
 
-    fooof_xr.attrs["metadata"] = json.dumps(metadata, indent=2, default=_json_safe)
+    metadata_json = json.dumps(metadata, indent=2, default=_json_safe)
+    fooof_xr.attrs["metadata"] = metadata_json
 
-    artifacts: dict[str, Artifact] = {
-        ".fooof.nc": Artifact(
-            item=fooof_xr,
-            writer=lambda path: fooof_xr.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
-        )
-    }
+    dataset_vars: dict[str, xr.DataArray] = {"fooof": fooof_xr}
 
     if include_timings:
         timings_array = timings.reshape(result_shape)
@@ -607,17 +604,24 @@ def fooof(
             timings_array,
             dims=other_dims,
             coords=coords,
-            name="fooof_fit_seconds",
+            name="timings",
         )
         timing_metadata = {
             "description": "Wall-clock duration per FOOOF fit",
             "unit": "seconds",
         }
         fooof_timings.attrs["metadata"] = json.dumps(timing_metadata, indent=2, default=_json_safe)
-        artifacts[".fooof_timings.nc"] = Artifact(
-            item=fooof_timings,
-            writer=lambda path: fooof_timings.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+        dataset_vars["timings"] = fooof_timings
+
+    fooof_dataset = xr.Dataset(data_vars=dataset_vars)
+    fooof_dataset.attrs["metadata"] = metadata_json
+
+    artifacts: dict[str, Artifact] = {
+        ".nc": Artifact(
+            item=fooof_dataset,
+            writer=lambda path: fooof_dataset.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
         )
+    }
 
     return FeatureResult(artifacts=artifacts)
 
