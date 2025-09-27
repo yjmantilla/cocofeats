@@ -6,7 +6,7 @@ FeatureDefinitions:
       - id: 0
         feature: SourceFile
       - id: 1
-        function: spectrum
+        function: mne_spectrum
         args:
           meeg: id.0
           compute_psd_kwargs:
@@ -67,7 +67,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep1.fif
       - id: 1
-        function: spectrum_array
+        function: mne_spectrum_array
         args:
           meeg: id.0
           method: 'welch'
@@ -87,7 +87,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep1.fif
       - id: 1
-        function: spectrum_array
+        function: mne_spectrum_array
         args:
           meeg: id.0
           method: 'multitaper'
