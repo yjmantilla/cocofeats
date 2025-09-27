@@ -20,6 +20,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 from . import register_feature
 from cocofeats.writers import _json_safe
+from cocofeats.utils import _resolve_eval_strings
 
 log = get_logger(__name__)
 
@@ -54,22 +55,6 @@ def _resolve_psd_dataarray(
         return xr.open_dataarray(psd_like)
 
     raise ValueError("Input must be a FeatureResult, xarray.DataArray, or path to netCDF artifact.")
-
-
-def _resolve_eval_strings(value: Any) -> Any:
-    """Recursively interpret ``eval%`` prefixed expressions within nested structures."""
-
-    if isinstance(value, dict):
-        return {key: _resolve_eval_strings(sub_value) for key, sub_value in value.items()}
-    if isinstance(value, list):
-        return [_resolve_eval_strings(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(_resolve_eval_strings(item) for item in value)
-    if isinstance(value, str) and value.startswith("eval%"):
-        expression = value.removeprefix("eval%")
-        namespace = {"np": np, "math": math}
-        return eval(expression, namespace)  # noqa: S307 - explicit request for dynamic evaluation
-    return value
 
 
 @register_feature

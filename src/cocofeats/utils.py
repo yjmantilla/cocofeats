@@ -112,6 +112,22 @@ def get_path(path: str | dict[str, str], mount_point: str | None = None) -> str:
     return path
 
 
+def _resolve_eval_strings(value: Any) -> Any:
+    """Recursively interpret ``eval%`` prefixed expressions within nested structures."""
+
+    if isinstance(value, dict):
+        return {key: _resolve_eval_strings(sub_value) for key, sub_value in value.items()}
+    if isinstance(value, list):
+        return [_resolve_eval_strings(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_resolve_eval_strings(item) for item in value)
+    if isinstance(value, str) and value.startswith("eval%"):
+        expression = value.removeprefix("eval%")
+        namespace = {"np": np, "math": math}
+        return eval(expression, namespace)  # noqa: S307 - explicit request for dynamic evaluation
+    return value
+
+
 def snake_to_camel(snake_str):
     """Convert a snake_case string to CamelCase.
 
