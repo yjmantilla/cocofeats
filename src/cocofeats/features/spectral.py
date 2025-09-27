@@ -833,7 +833,7 @@ def fooof_scalars(
         try:
             fm = FOOOF()
             fm.load(io.StringIO(payload))
-            if not fm.has_model():
+            if not fm.has_model:
                 raise ValueError("FOOOF object missing model")
         except Exception as exc:  # noqa: BLE001
             log.warning("Failed to load FOOOF payload for scalars", index=idx, error=str(exc))
@@ -846,6 +846,9 @@ def fooof_scalars(
         "aperiodic_params": np.empty((flat_count,), dtype=object),
         "r_squared": np.full((flat_count,), np.nan, dtype=float),
         "error": np.full((flat_count,), np.nan, dtype=float),
+        "aperiodic_offset": np.empty((flat_count,), dtype=float),
+        "aperiodic_knee": np.empty((flat_count,), dtype=float),
+        "aperiodic_exponent": np.empty((flat_count,), dtype=float),
     }
 
     for idx, fm in enumerate(loaded_models):
@@ -864,6 +867,15 @@ def fooof_scalars(
             if ap_mode != "knee" and ap_params.size < 2:
                 raise ValueError("Fixed mode expects two parameters")
             scalar_arrays["aperiodic_params"][idx] = ap_params.tolist()
+
+            if ap_params.size == 2:
+                scalar_arrays['aperiodic_offset'][idx] = float(ap_params[0])
+                scalar_arrays['aperiodic_knee'][idx] = np.nan
+                scalar_arrays['aperiodic_exponent'][idx] = float(ap_params[1])
+            else:
+                scalar_arrays['aperiodic_offset'][idx] = float(ap_params[0])
+                scalar_arrays['aperiodic_knee'][idx] = float(ap_params[1])
+                scalar_arrays['aperiodic_exponent'][idx] = float(ap_params[2])
 
             scalar_arrays["r_squared"][idx] = float(
                 getattr(fm, "r_squared_", getattr(fm, "r_squared", np.nan))
@@ -884,13 +896,15 @@ def fooof_scalars(
     }
 
     name_map = {
-        "aperiodic_params": "fooof_aperiodic_params",
+        "aperiodic_offset": "fooof_aperiodic_offset",
+        "aperiodic_knee": "fooof_aperiodic_knee",
+        "aperiodic_exponent": "fooof_aperiodic_exponent",
         "r_squared": "fooof_r_squared",
         "error": "fooof_error",
     }
 
     metadata_base: dict[str, Any] = {
-        "components": ["aperiodic_params", "r_squared", "error"],
+        "components": list(name_map),
         "invalid_count": len(set(invalid_indices)),
         "total_count": flat_count,
         "invalid_indices": sorted(set(invalid_indices)),
@@ -908,22 +922,46 @@ def fooof_scalars(
 
     artifacts: dict[str, Artifact]
     if component == "all":
-        dataset = xr.Dataset({name_map[key]: make_array(key) for key in ("aperiodic_params", "r_squared", "error")})
-        dataset.attrs["metadata"] = json.dumps(metadata_base, indent=2, default=_json_safe)
-        artifacts = {
-            ".nc": Artifact(
-                item=dataset,
-                writer=lambda path: dataset.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
-            )
-        }
-    else:
-        xarr = make_array(component)
-        artifacts = {
-            ".nc": Artifact(
+        artifacts = {}
+        for key, suffix in (
+            ("aperiodic_offset", ".apOffset.nc"),
+            ("aperiodic_knee", ".apKnee.nc"),
+            ("aperiodic_exponent", ".apExponent.nc"),
+            ("r_squared", ".rSquared.nc"),
+            ("error", ".error.nc"),
+        ):
+            xarr = make_array(key)
+            artifacts[suffix] = Artifact(
                 item=xarr,
-                writer=lambda path: xarr.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+                writer=lambda path, arr=xarr: arr.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
             )
+    else:
+        mapped = {
+            "aperiodic_params": ["aperiodic_offset", "aperiodic_knee", "aperiodic_exponent"],
+            "r_squared": ["rSquared"],
+            "error": ["error"],
         }
+        keys = mapped.get(component, [component])
+        if component == "aperiodic_params":
+            artifacts = {}
+            for key, suffix in zip(
+                keys,
+                (".apOffset.nc", ".apKnee.nc", ".apExponent.nc"),
+            ):
+                xarr = make_array(key)
+                artifacts[suffix] = Artifact(
+                    item=xarr,
+                    writer=lambda path, arr=xarr: arr.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+                )
+        else:
+            key = keys[0]
+            xarr = make_array(key)
+            artifacts = {
+                ".nc": Artifact(
+                    item=xarr,
+                    writer=lambda path: xarr.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+                )
+            }
 
     return FeatureResult(artifacts=artifacts)
 
