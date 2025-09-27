@@ -187,10 +187,10 @@ def spectrum_array(
     Returns
     -------
     FeatureResult
-        An object containing the PSD as a ``.nc`` artifact (``xarray.DataArray``)
+        An object containing the PSD as a ``.nc`` artifact (``xarray.Dataset``)
         plus metadata describing the output dimensions. When multitaper is used
-        with ``output='complex'``, taper weights are stored as an additional
-        ``.weights.nc`` artifact.
+        with ``output='complex'``, taper weights are included in the same
+        dataset under the ``weights`` variable.
     """
 
     method = method.lower()
@@ -321,8 +321,6 @@ def spectrum_array(
         )
         additional_axes.append("frequencies")
 
-    psd_xarray = xr.DataArray(data=psds, dims=psd_dims, coords=psd_coords)
-
     dimension_notes = {
         "time_dim": time_dim,
         "replaced_with": "frequencies",
@@ -371,16 +369,23 @@ def spectrum_array(
         )
         metadata["weights_shape"] = [int(v) for v in weights_array.shape]
 
-    psd_xarray.attrs["metadata"] = json.dumps(metadata, indent=2, default=_json_safe)
+    psd_xarray = xr.DataArray(data=psds, dims=psd_dims, coords=psd_coords)
+    metadata_json = json.dumps(metadata, indent=2, default=_json_safe)
+    psd_xarray.attrs["metadata"] = metadata_json
+
+    dataset_vars: dict[str, xr.DataArray] = {"spectrum": psd_xarray}
+    if weights_xarray is not None:
+        dataset_vars["weights"] = weights_xarray
+
+    psd_dataset = xr.Dataset(data_vars=dataset_vars)
+    psd_dataset.attrs["metadata"] = metadata_json
 
     artifacts: dict[str, Artifact] = {
-        ".nc": Artifact(item=psd_xarray, writer=lambda path: psd_xarray.to_netcdf(path,engine='netcdf4',format='NETCDF4')),
-        #".zarr": Artifact(item=psd_xarray, writer=lambda path: psd_xarray.to_zarr(path)),
+        ".nc": Artifact(
+            item=psd_dataset,
+            writer=lambda path: psd_dataset.to_netcdf(path, engine='netcdf4', format='NETCDF4'),
+        ),
     }
-    if weights_xarray is not None:
-        artifacts[".weights.nc"] = Artifact(
-            item=weights_xarray, writer=lambda path: weights_xarray.to_netcdf(path)
-        )
 
     return FeatureResult(artifacts=artifacts)
 
