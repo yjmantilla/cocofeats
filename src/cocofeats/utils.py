@@ -8,6 +8,7 @@ from typing import Literal
 
 from cocofeats.definitions import PathLike
 from cocofeats.loggers import get_logger
+from typing import Any
 
 log = get_logger(__name__)
 
