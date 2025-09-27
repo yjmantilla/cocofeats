@@ -44,6 +44,59 @@ def mean_across_dimension(xarray_data, dim):
     artifacts = {".nc": Artifact(item=mean_data, writer=lambda path: mean_data.to_netcdf(path))}
     return FeatureResult(artifacts=artifacts)
 
+
+@register_feature(name="extract_data_var", override=True)
+def extract_data_var(dataset_like, data_var: str):
+    """Extract a named variable from an ``xarray.Dataset`` artifact.
+
+    Parameters
+    ----------
+    dataset_like : FeatureResult | xarray.Dataset | str | os.PathLike
+        Source dataset or reference. Strings are interpreted as paths to
+        NetCDF files containing an ``xarray.Dataset``.
+    data_var : str
+        Name of the dataset variable to extract.
+
+    Returns
+    -------
+    FeatureResult
+        A feature result containing the selected variable as a NetCDF artifact.
+    """
+
+    if isinstance(dataset_like, FeatureResult):
+        if ".nc" not in dataset_like.artifacts:
+            raise ValueError("FeatureResult does not contain a .nc artifact to process.")
+        dataset_like = dataset_like.artifacts[".nc"].item
+
+    target_array = None
+
+    if isinstance(dataset_like, xr.Dataset):
+        if data_var not in dataset_like.data_vars:
+            raise KeyError(f"Variable '{data_var}' not found in dataset.")
+        target_array = dataset_like[data_var].copy()
+    elif isinstance(dataset_like, xr.DataArray):
+        if dataset_like.name not in {data_var, None}:
+            raise ValueError(
+                "Input DataArray does not match requested variable name and cannot be extracted."
+            )
+        target_array = dataset_like.copy()
+        if target_array.name is None:
+            target_array.name = data_var
+    elif isinstance(dataset_like, (str, os.PathLike)):
+        ds = xr.open_dataset(dataset_like)
+        try:
+            if data_var not in ds.data_vars:
+                raise KeyError(f"Variable '{data_var}' not found in dataset.")
+            target_array = ds[data_var].load()
+        finally:
+            ds.close()
+    else:
+        raise ValueError("dataset_like must be a FeatureResult, Dataset, DataArray, or path.")
+
+    artifacts = {".nc": Artifact(item=target_array, writer=lambda path: target_array.to_netcdf(path))}
+    return FeatureResult(artifacts=artifacts)
+
+
 def slice_xarray(xarray_data, dim, start=None, end=None):
     """
     Slice an xarray DataArray along a specified dimension.
