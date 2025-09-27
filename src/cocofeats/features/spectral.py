@@ -172,7 +172,6 @@ def spectrum_array(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
     method: str = "welch",
     method_kwargs: dict[str, Any] | None = None,
-    extra_artifacts: bool = True,
 ) -> FeatureResult:
     """Compute PSD from array data using Welch or multitaper algorithms.
 
@@ -381,42 +380,6 @@ def spectrum_array(
     if weights_xarray is not None:
         artifacts[".weights.nc"] = Artifact(
             item=weights_xarray, writer=lambda path: weights_xarray.to_netcdf(path)
-        )
-
-    # Support visualization if dimension are 2 (spaces, frequencies) or 3 (epochs, spaces, frequencies)
-
-    if extra_artifacts:
-        #gif_artifacts = _make_gifs(psd_xarray)
-        #artifacts.update(gif_artifacts)
-
-        report = mne.Report(title="Spectrum", verbose="error")
-        if len(psd_dims) == 2 and psd_dims == ["spaces", "frequencies"]:
-            fig = psd_xarray.plot(
-                x="frequencies",
-                y="spaces",
-                yincrease=False,
-                figsize=(8, 12),
-                aspect="auto",
-            ).figure
-            report.add_figure(fig, title="Spectrum")
-
-        elif len(psd_dims) == 3 and psd_dims == ["epochs", "spaces", "frequencies"]:
-            mean_over_epochs = psd_xarray.mean(dim="epochs")
-            fig = mean_over_epochs.plot(
-                x="frequencies",
-                y="spaces",
-                yincrease=False,
-                figsize=(8, 12),
-                aspect="auto",
-            ).figure
-            report.add_figure(fig, title="Mean Spectrum over epochs")
-        report.add_html(
-            f"<pre>{json.dumps(metadata, indent=2)}</pre>",
-            title="Metadata",
-            section="Metadata",
-        )
-        artifacts[".report.html"] = Artifact(
-            item=report, writer=lambda path: report.save(path, overwrite=True, open_browser=False)
         )
 
     return FeatureResult(artifacts=artifacts)
