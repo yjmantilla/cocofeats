@@ -73,7 +73,7 @@ def _resolve_eval_strings(value: Any) -> Any:
 
 
 @register_feature
-def spectrum(
+def mne_spectrum(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
     compute_psd_kwargs: dict[str, Any] | None = None,
     extra_artifacts: bool = False,
@@ -168,7 +168,7 @@ def spectrum(
 
 
 @register_feature
-def spectrum_array(
+def mne_spectrum_array(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
     method: str = "welch",
     method_kwargs: dict[str, Any] | None = None,
