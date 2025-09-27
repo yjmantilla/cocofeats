@@ -1,12 +1,17 @@
+import copy
+import io
 import json
+import math
 import os
+import time
 from collections.abc import Mapping, Sequence
 from itertools import permutations
-from typing import Any
+from typing import Any, Literal
 
 import mne
 import numpy as np
 import xarray as xr
+from fooof import FOOOF
 
 from cocofeats.definitions import Artifact, FeatureResult
 from cocofeats.loaders import load_meeg
@@ -49,6 +54,58 @@ def _resolve_psd_dataarray(
         return xr.open_dataarray(psd_like)
 
     raise ValueError("Input must be a FeatureResult, xarray.DataArray, or path to netCDF artifact.")
+
+
+def _resolve_eval_strings(value: Any) -> Any:
+    """Recursively interpret ``eval%`` prefixed expressions within nested structures."""
+
+    if isinstance(value, dict):
+        return {key: _resolve_eval_strings(sub_value) for key, sub_value in value.items()}
+    if isinstance(value, list):
+        return [_resolve_eval_strings(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_resolve_eval_strings(item) for item in value)
+    if isinstance(value, str) and value.startswith("eval%"):
+        expression = value.removeprefix("eval%")
+        namespace = {"np": np, "math": math}
+        return eval(expression, namespace)  # noqa: S307 - explicit request for dynamic evaluation
+    return value
+
+
+def _generate_aperiodic(freqs: np.ndarray, params: Sequence[float], mode: str) -> np.ndarray:
+    """Return the log10 aperiodic fit evaluated on ``freqs``."""
+
+    freqs = np.asarray(freqs, dtype=float)
+    if mode == "knee":
+        if len(params) != 3:
+            raise ValueError("Knee mode expects three aperiodic parameters (offset, knee, exponent).")
+        offset, knee, exponent = (float(params[0]), float(params[1]), float(params[2]))
+        if knee < 0:
+            raise ValueError("Knee parameter must be non-negative.")
+        return offset - np.log10(knee + np.power(freqs, exponent))
+
+    if len(params) != 2:
+        raise ValueError("Fixed mode expects two aperiodic parameters (offset, exponent).")
+    offset, exponent = (float(params[0]), float(params[1]))
+    return offset - exponent * np.log10(freqs)
+
+
+def _generate_periodic(freqs: np.ndarray, peak_params: Sequence[Sequence[float]]) -> np.ndarray:
+    """Return the summed peak model in log10 space for the provided ``peak_params``."""
+
+    freqs = np.asarray(freqs, dtype=float)
+    total = np.zeros_like(freqs, dtype=float)
+    for peak in peak_params or []:
+        if peak is None or len(peak) != 3:
+            continue
+        center, amplitude, bandwidth = map(float, peak)
+        if np.isnan(center) or np.isnan(amplitude) or np.isnan(bandwidth):
+            continue
+        if bandwidth <= 0:
+            continue
+        std = bandwidth / 2.0
+        total += amplitude * np.exp(-((freqs - center) ** 2) / (2.0 * std**2))
+    return total
 
 
 @register_feature
@@ -468,6 +525,452 @@ def spectrum_array(
         artifacts[".report.html"] = Artifact(
             item=report, writer=lambda path: report.save(path, overwrite=True, open_browser=False)
         )
+
+    return FeatureResult(artifacts=artifacts)
+
+
+@register_feature
+def fooof(
+    psd_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    *,
+    freq_dim: str = "frequencies",
+    freqs: Sequence[float] | np.ndarray | None = None,
+    fooof_options: Mapping[str, Any] | None = None,
+    allow_eval_strings: bool = True,
+    failure_value: str | None = "{}",
+    include_timings: bool = True,
+) -> FeatureResult:
+    """Fit FOOOF models for every non-frequency slice in a PSD ``xarray`` artifact.
+
+    Parameters
+    ----------
+    psd_like : FeatureResult | xarray.DataArray | path-like
+        Output from ``spectrum``/``spectrum_array`` or a compatible ``xarray`` artifact.
+    freq_dim : str, optional
+        Name of the frequency dimension. Defaults to ``"frequencies"``.
+    freqs : sequence of float, optional
+        Explicit frequency values. If omitted they are read from the coordinate
+        of ``freq_dim``.
+    fooof_options : mapping, optional
+        Nested configuration dictionary using the legacy layout
+        ``{"FOOOF": {...}, "fit": {...}, "save": {...}, "freq_res": ...}``.
+    allow_eval_strings : bool, optional
+        Interpret values that start with ``"eval%"`` using ``eval`` with
+        ``numpy``/``math`` in scope. Mirrors the historic behaviour.
+    failure_value : str | None, optional
+        Fallback string stored when a FOOOF fit fails. Defaults to ``"{}"``.
+    include_timings : bool, optional
+        Whether to output a timings artifact (seconds per fit).
+
+    Returns
+    -------
+    FeatureResult
+        ``.fooof.nc`` artifact with JSON serialisations of each fitted model and
+        optionally a ``.fooof_timings.nc`` artifact with execution times.
+    """
+
+    psd_xr = _resolve_psd_dataarray(psd_like)
+
+    if freq_dim not in psd_xr.dims:
+        raise ValueError(
+            f"Frequency dimension '{freq_dim}' not present in input dims: {psd_xr.dims}"
+        )
+
+    if freqs is None:
+        coord = psd_xr.coords.get(freq_dim)
+        if coord is None:
+            raise ValueError(
+                "Frequency dimension must provide coordinates when 'freqs' is not supplied."
+            )
+        freq_values = np.asarray(coord.values, dtype=float)
+    else:
+        freq_values = np.asarray(freqs, dtype=float)
+
+    if freq_values.ndim != 1:
+        raise ValueError("Frequency information must be one-dimensional.")
+
+    n_freqs = freq_values.size
+    if n_freqs == 0:
+        raise ValueError("Frequency array must contain at least one value.")
+
+    options = copy.deepcopy(dict(fooof_options or {}))
+    if allow_eval_strings:
+        options = _resolve_eval_strings(options)
+
+    fooof_init_kwargs = dict(options.pop("FOOOF", {}))
+    fit_kwargs = dict(options.pop("fit", {}))
+    save_kwargs = dict(options.pop("save", {}))
+    freq_res = options.pop("freq_res", None)
+    unused_options = options  # Whatever remains is captured for metadata purposes.
+
+    save_defaults = {"save_results": True, "save_settings": True, "save_data": False}
+    for key, value in save_defaults.items():
+        save_kwargs.setdefault(key, value)
+
+    if freq_res is not None:
+        freq_res = float(freq_res)
+        if freq_res <= 0:
+            raise ValueError("freq_res must be a positive float if provided.")
+
+    if n_freqs > 1:
+        diffs = np.diff(freq_values)
+        valid_diffs = diffs[np.nonzero(diffs)]
+        current_res = float(np.median(np.abs(valid_diffs))) if valid_diffs.size else float("nan")
+    else:
+        current_res = float("nan")
+
+    downsample_step = 1
+    if freq_res is not None and n_freqs > 1 and np.isfinite(current_res) and current_res > 0:
+        if freq_res < current_res:
+            log.warning(
+                "Requested freq_res is finer than available resolution; skipping downsampling",
+                requested=freq_res,
+                available=current_res,
+            )
+        else:
+            downsample_step = max(1, int(math.ceil(freq_res / current_res)))
+
+    freq_values_downsampled = freq_values[::downsample_step]
+    if freq_values_downsampled.size == 0:
+        raise ValueError("Downsampling removed all frequency points; check freq_res setting.")
+
+    other_dims = [dim for dim in psd_xr.dims if dim != freq_dim]
+    transposed = psd_xr.transpose(*(other_dims + [freq_dim]))
+    psd_values = np.asarray(transposed.values)
+    if psd_values.ndim == 1:
+        psd_values = psd_values[np.newaxis, :]
+
+    other_shape = [int(transposed.sizes[dim]) for dim in other_dims]
+    flattened = psd_values.reshape(-1, n_freqs)
+
+    fooof_payloads = np.empty(flattened.shape[0], dtype=object)
+    timings = np.full(flattened.shape[0], np.nan, dtype=float)
+    failure_records: list[dict[str, Any]] = []
+
+    coords_cache: dict[str, np.ndarray] = {}
+    coords_for_output: dict[str, np.ndarray] = {}
+    for dim in other_dims:
+        if dim in transposed.coords:
+            values = np.asarray(transposed.coords[dim].values)
+        else:
+            values = np.arange(transposed.sizes[dim])
+        coords_cache[dim] = values
+        coords_for_output[dim] = values
+
+    fallback_value = "" if failure_value is None else str(failure_value)
+
+    for flat_idx in range(flattened.shape[0]):
+        if other_dims:
+            unravel = np.unravel_index(flat_idx, tuple(other_shape))
+            coord_mapping = {
+                dim: _json_safe(coords_cache[dim][unravel[idx]])
+                for idx, dim in enumerate(other_dims)
+            }
+        else:
+            unravel = ()
+            coord_mapping = {}
+
+        start = time.perf_counter()
+        try:
+            signal = np.asarray(flattened[flat_idx])
+            if signal.size != n_freqs:
+                raise ValueError(
+                    "Each PSD slice must have the same number of frequencies as the coordinate array."
+                )
+
+            signal_to_fit = signal[::downsample_step]
+            if signal_to_fit.size != freq_values_downsampled.size:
+                raise ValueError("Downsampled signal and frequency vectors must be the same length.")
+
+            fm = FOOOF(verbose=False, **fooof_init_kwargs)
+            fm.fit(freq_values_downsampled, signal_to_fit, **fit_kwargs)
+
+            buffer = io.StringIO()
+            fm.save(
+                buffer,
+                file_path=None,
+                append=False,
+                save_results=save_kwargs.get("save_results", True),
+                save_settings=save_kwargs.get("save_settings", True),
+                save_data=save_kwargs.get("save_data", False),
+            )
+            payload = buffer.getvalue() or json.dumps({}, indent=2)
+            fooof_payloads[flat_idx] = payload
+        except Exception as exc:  # noqa: BLE001 - domain specific fallbacks are required
+            duration = time.perf_counter() - start
+            timings[flat_idx] = duration
+            fooof_payloads[flat_idx] = fallback_value
+            failure_records.append({
+                "index": int(flat_idx),
+                "coords": coord_mapping,
+                "error": repr(exc),
+            })
+            log.warning("FOOOF fit failed", coords=coord_mapping, error=str(exc))
+            continue
+
+        timings[flat_idx] = time.perf_counter() - start
+
+    if other_dims:
+        result_shape = tuple(other_shape)
+        coords = coords_for_output
+    else:
+        result_shape = ()
+        coords = {}
+
+    result_array = fooof_payloads.reshape(result_shape)
+    fooof_xr = xr.DataArray(result_array, dims=other_dims, coords=coords, name="fooof_json")
+
+    metadata: dict[str, Any] = {
+        "freq_dim": freq_dim,
+        "frequencies": _json_safe(freq_values),
+        "frequencies_downsampled": _json_safe(freq_values_downsampled),
+        "downsample_step": int(downsample_step),
+        "fooof_kwargs": _json_safe(fooof_init_kwargs),
+        "fit_kwargs": _json_safe(fit_kwargs),
+        "save_kwargs": _json_safe(save_kwargs),
+        "unused_options": _json_safe(unused_options) if unused_options else None,
+        "allow_eval_strings": allow_eval_strings,
+        "failure_value": fallback_value,
+        "input_dims": list(psd_xr.dims),
+        "input_shape": [int(psd_xr.sizes[dim]) for dim in psd_xr.dims],
+        "output_dims": list(fooof_xr.dims),
+        "output_shape": [int(fooof_xr.sizes[dim]) for dim in fooof_xr.dims],
+        "failures": failure_records,
+        "frequency_resolution": {
+            "requested": freq_res,
+            "available": current_res,
+        },
+    }
+
+    source_metadata = psd_xr.attrs.get("metadata")
+    if source_metadata is not None:
+        metadata["source_metadata"] = source_metadata
+
+    fooof_xr.attrs["metadata"] = json.dumps(metadata, indent=2, default=_json_safe)
+
+    artifacts: dict[str, Artifact] = {
+        ".fooof.nc": Artifact(
+            item=fooof_xr,
+            writer=lambda path: fooof_xr.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+        )
+    }
+
+    if include_timings:
+        timings_array = timings.reshape(result_shape)
+        fooof_timings = xr.DataArray(
+            timings_array,
+            dims=other_dims,
+            coords=coords,
+            name="fooof_fit_seconds",
+        )
+        timing_metadata = {
+            "description": "Wall-clock duration per FOOOF fit",
+            "unit": "seconds",
+        }
+        fooof_timings.attrs["metadata"] = json.dumps(timing_metadata, indent=2, default=_json_safe)
+        artifacts[".fooof_timings.nc"] = Artifact(
+            item=fooof_timings,
+            writer=lambda path: fooof_timings.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+        )
+
+    return FeatureResult(artifacts=artifacts)
+
+
+@register_feature
+def fooof_component(
+    fooof_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    *,
+    component: Literal["aperiodic", "periodic", "residual"] = "aperiodic",
+    freq_dim: str = "frequencies",
+    psd_like: FeatureResult | xr.DataArray | str | os.PathLike[str] | None = None,
+    freq_match_tolerance: float = 1e-6,
+) -> FeatureResult:
+    """Derive linear-space components from serialized FOOOF fits.
+
+    Parameters
+    ----------
+    fooof_like : FeatureResult | xarray.DataArray | path-like
+        Artifact generated by :func:`fooof`, containing JSON strings per slice.
+    component : {"aperiodic", "periodic", "residual"}, optional
+        Component to extract: ``aperiodic`` returns the baseline spectrum,
+        ``periodic`` reconstructs modelled oscillatory power using fitted
+        Gaussian peaks, and ``residual`` subtracts the aperiodic fit from an
+        observed PSD (requires ``psd_like``).
+    freq_dim : str, optional
+        Name of the frequency dimension for the output. Defaults to ``"frequencies"``.
+    psd_like : FeatureResult | xarray.DataArray | path-like, optional
+        Observed PSD used to compute residual oscillatory power. Must align in
+        all non-frequency dimensions with the FOOOF artifact. Required when
+        ``component='residual'``.
+    freq_match_tolerance : float, optional
+        Absolute tolerance when matching PSD frequency coordinates to the
+        frequencies stored in the FOOOF metadata. Defaults to ``1e-6``.
+
+    Returns
+    -------
+    FeatureResult
+        ``.nc`` artifact with the requested component in linear power units.
+    """
+
+    component = component.lower()
+    if component not in {"aperiodic", "periodic", "residual"}:
+        raise ValueError("component must be one of {'aperiodic', 'periodic', 'residual'}")
+
+    fooof_xr = _resolve_psd_dataarray(fooof_like)
+
+    meta_raw = fooof_xr.attrs.get("metadata") or "{}"
+    try:
+        fooof_meta = json.loads(meta_raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("FOOOF artifact metadata is not valid JSON") from exc
+
+    freq_source = fooof_meta.get("frequencies_downsampled") or fooof_meta.get("frequencies")
+    if freq_source is None:
+        raise ValueError("FOOOF metadata must include 'frequencies' or 'frequencies_downsampled'.")
+    freq_values_model = np.asarray(freq_source, dtype=float)
+    if freq_values_model.size == 0:
+        raise ValueError("Frequency vector extracted from FOOOF metadata is empty.")
+
+    other_dims = list(fooof_xr.dims)
+    other_shape = [int(fooof_xr.sizes[dim]) for dim in other_dims]
+    flat_count = int(np.prod(other_shape)) if other_shape else 1
+
+    fooof_values = np.asarray(fooof_xr.values, dtype=object).reshape(flat_count)
+
+    periodic_required = component in {"periodic", "residual"}
+    residual_required = component == "residual"
+
+    if residual_required and psd_like is None:
+        raise ValueError("psd_like must be provided when component='residual'.")
+
+    psd_flat = None
+    psd_meta = None
+    if residual_required:
+        psd_xr = _resolve_psd_dataarray(psd_like)  # type: ignore[arg-type]
+
+        if freq_dim not in psd_xr.dims:
+            raise ValueError(
+                f"PSD input must contain the frequency dimension '{freq_dim}' (found {psd_xr.dims})."
+            )
+
+        psd_other_dims = [dim for dim in psd_xr.dims if dim != freq_dim]
+        if psd_other_dims != other_dims:
+            raise ValueError(
+                "PSD input dimensions must match the FOOOF artifact (excluding frequency)."
+            )
+
+        psd_freqs = np.asarray(psd_xr.coords[freq_dim].values, dtype=float)
+        index_map: list[int] = []
+        for freq in freq_values_model:
+            idx = int(np.argmin(np.abs(psd_freqs - freq)))
+            if not np.isclose(psd_freqs[idx], freq, atol=freq_match_tolerance):
+                raise ValueError(
+                    "Unable to align PSD frequencies with FOOOF metadata within tolerance."
+                )
+            index_map.append(idx)
+
+        psd_downsampled = psd_xr.isel({freq_dim: index_map})
+        psd_downsampled = psd_downsampled.assign_coords({freq_dim: freq_values_model})
+        psd_transposed = psd_downsampled.transpose(*(other_dims + [freq_dim]))
+        psd_flat = np.asarray(psd_transposed.values, dtype=float).reshape(flat_count, -1)
+        psd_meta = psd_xr.attrs.get("metadata")
+
+    result_values = np.full((flat_count, freq_values_model.size), np.nan, dtype=float)
+    invalid_indices: list[int] = []
+
+    for flat_idx in range(flat_count):
+        payload_raw = fooof_values[flat_idx]
+        if payload_raw in (None, "", "{}"):  # quick exits for failures
+            invalid_indices.append(flat_idx)
+            continue
+
+        try:
+            payload = json.loads(payload_raw)
+        except (TypeError, json.JSONDecodeError):
+            invalid_indices.append(flat_idx)
+            continue
+
+        results = payload.get("results") or {}
+        settings = payload.get("settings") or {}
+        ap_params = results.get("aperiodic_params")
+        if not ap_params:
+            invalid_indices.append(flat_idx)
+            continue
+
+        ap_mode = settings.get("aperiodic_mode", fooof_meta.get("fooof_kwargs", {}).get("aperiodic_mode", "fixed"))
+
+        try:
+            ap_fit_log = _generate_aperiodic(freq_values_model, ap_params, ap_mode)
+        except ValueError:
+            invalid_indices.append(flat_idx)
+            continue
+
+        ap_linear = np.power(10.0, ap_fit_log)
+
+        if component == "aperiodic":
+            result_values[flat_idx, :] = ap_linear
+            continue
+
+        periodic_log = np.zeros_like(freq_values_model, dtype=float)
+        if periodic_required:
+            periodic_log = _generate_periodic(freq_values_model, results.get("peak_params") or [])
+
+        if component == "periodic":
+            fooof_model_linear = np.power(10.0, ap_fit_log + periodic_log)
+            result_values[flat_idx, :] = fooof_model_linear - ap_linear
+            continue
+
+        if component == "residual":
+            if psd_flat is None:
+                raise RuntimeError("Internal error: PSD data not prepared for residual computation.")
+            observed = psd_flat[flat_idx, :]
+            result_values[flat_idx, :] = observed - ap_linear
+
+    output_shape = tuple(other_shape + [freq_values_model.size]) if other_dims else (freq_values_model.size,)
+    reshaped = result_values.reshape(output_shape)
+    output_dims = other_dims + [freq_dim]
+
+    output_coords: dict[str, Any] = {}
+    for dim in other_dims:
+        if dim in fooof_xr.coords:
+            output_coords[dim] = fooof_xr.coords[dim]
+        else:
+            output_coords[dim] = np.arange(fooof_xr.sizes[dim])
+    output_coords[freq_dim] = freq_values_model
+
+    name = {
+        "aperiodic": "fooof_aperiodic_linear",
+        "periodic": "fooof_periodic_linear",
+        "residual": "fooof_residual_linear",
+    }[component]
+
+    component_xr = xr.DataArray(reshaped, dims=output_dims, coords=output_coords, name=name)
+
+    component_metadata: dict[str, Any] = {
+        "source": "fooof",
+        "component": component,
+        "frequencies": _json_safe(freq_values_model.tolist()),
+        "frequency_resolution": fooof_meta.get("frequency_resolution"),
+        "downsample_step": fooof_meta.get("downsample_step", 1),
+        "invalid_count": len(invalid_indices),
+        "total_count": flat_count,
+        "invalid_indices": invalid_indices,
+        "fooof_metadata": fooof_meta,
+    }
+
+    if psd_meta is not None:
+        component_metadata["psd_metadata"] = psd_meta
+    if residual_required:
+        component_metadata["freq_match_tolerance"] = freq_match_tolerance
+
+    component_xr.attrs["metadata"] = json.dumps(component_metadata, indent=2, default=_json_safe)
+
+    artifacts = {
+        ".nc": Artifact(
+            item=component_xr,
+            writer=lambda path: component_xr.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+        )
+    }
 
     return FeatureResult(artifacts=artifacts)
 
