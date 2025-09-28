@@ -171,5 +171,5 @@ if __name__ == "__main__":
             max_files_per_dataset=args.max_files_per_dataset,
             dry_run=args.dry_run,
             only_index=args.only_index,
-            raise_on_error=args.raise_on_error,
+            raise_on_error = True if args.raise_on_error else False,
         )

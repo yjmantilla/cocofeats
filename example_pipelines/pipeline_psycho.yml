@@ -1,4 +1,4 @@
-datasets: _data/psychostimulants/datasets_psycho.yml
+datasets: example_pipelines/datasets_psycho.yml
 mount_point: local
 
 FeatureDefinitions:
@@ -143,7 +143,7 @@ FeatureDefinitions:
       - id: 2
         function: extract_data_var
         args:
-          xarray_data: id.1
+          dataset_like: id.1
           data_var: 'spectrum'
       - id: 3
         function: aggregate_across_dimension
@@ -203,7 +203,7 @@ FeatureDefinitions:
       - id: 1
         function: extract_data_var
         args:
-          xarray_data: id.0
+          dataset_like: id.0
           data_var: 'fooof'
       - id: 2
         function: fooof_component
@@ -220,7 +220,7 @@ FeatureDefinitions:
       - id: 1
         function: extract_data_var
         args:
-          xarray_data: id.0
+          dataset_like: id.0
           data_var: 'fooof'
       - id: 2
         function: fooof_component
@@ -237,7 +237,7 @@ FeatureDefinitions:
       - id: 1
         function: extract_data_var
         args:
-          xarray_data: id.0
+          dataset_like: id.0
           data_var: 'fooof'
       - id: 2
         function: fooof_component
@@ -254,7 +254,7 @@ FeatureDefinitions:
       - id: 1
         function: extract_data_var
         args:
-          xarray_data: id.0
+          dataset_like: id.0
           data_var: 'fooof'
       - id: 2
         function: fooof_component
@@ -271,7 +271,7 @@ FeatureDefinitions:
       - id: 1
         function: extract_data_var
         args:
-          xarray_data: id.0
+          dataset_like: id.0
           data_var: 'fooof'
       - id: 2
         function: fooof_scalars
