@@ -1,0 +1,298 @@
+datasets: _data/psychostimulants/datasets_psycho.yml
+mount_point: local
+
+FeatureDefinitions:
+  BasicPrep5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: SourceFile
+      - id: 1
+        function: keep_channels
+        args:
+          mne_object: id.0
+          channel_names: ["F4", "F8", "P3","T4", "F7", "T5", "C3", "A1", "T3", "Fz", "O1","F3", "O2", "Fp1", "P4", "Fp2", "Pz", "C4", "Cz", "T6", "A2"]
+          save: False
+      - id: 2
+        function: basic_preprocessing
+        args:
+          mne_object: id.1
+          resample: 200              # resample to 200 Hz
+          notch_filter:
+            freqs: [60]           # powerline
+            filter_length: 'auto'
+            notch_widths: null
+            trans_bandwidth: 1
+            method: 'fir'
+            iir_params: null
+            mt_bandwidth: null
+            p_value: 0.05
+            picks: null
+            n_jobs: null
+            phase: 'zero'
+            fir_window: 'hamming'
+            fir_design: 'firwin'
+            pad: 'reflect_limited'
+          filter_args: null
+          epoch_config:
+            duration: 5.0
+            overlap: 0.0
+          extra_artifacts: True
+
+  BasicPrep10min:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: SourceFile
+      - id: 1
+        function: keep_channels
+        args:
+          mne_object: id.0
+          channel_names: ["F4", "F8", "P3","T4", "F7", "T5", "C3", "A1", "T3", "Fz", "O1","F3", "O2", "Fp1", "P4", "Fp2", "Pz", "C4", "Cz", "T6", "A2"]
+          save: False
+      - id: 2
+        function: basic_preprocessing
+        args:
+          mne_object: id.1
+          resample: 200              # resample to 200 Hz
+          notch_filter:
+            freqs: [60]           # powerline
+            filter_length: 'auto'
+            notch_widths: null
+            trans_bandwidth: 1
+            method: 'fir'
+            iir_params: null
+            mt_bandwidth: null
+            p_value: 0.05
+            picks: null
+            n_jobs: null
+            phase: 'zero'
+            fir_window: 'hamming'
+            fir_design: 'firwin'
+            pad: 'reflect_limited'
+          filter_args: null
+          epoch_config:
+            duration: 600.0
+            overlap: 0.0
+          extra_artifacts: True
+
+  CheckLineFrequency:
+    overwrite : False
+    flow:
+      - id: 0
+        feature: SourceFile
+      - id: 1
+        function: keep_channels
+        args:
+          mne_object: id.0
+          channel_names: ["F4", "F8", "P3","T4", "F7", "T5", "C3", "A1", "T3", "Fz", "O1","F3", "O2", "Fp1", "P4", "Fp2", "Pz", "C4", "Cz", "T6", "A2"]
+          save: False
+      - id: 2
+        function: mne_spectrum
+        args:
+          meeg: id.1
+          compute_psd_kwargs:
+            method: 'welch'
+            fmin: 0
+            fmax: 200
+
+
+  SpectrumArrayMultitaper5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        function: mne_spectrum_array
+        args:
+          meeg: id.0
+          method: 'multitaper'
+          method_kwargs:
+            bandwidth : null
+            adaptive: False
+            low_bias: True
+            normalization: 'length'
+            remove_dc: True
+            output: 'power'
+
+  SpectrumArrayMultitaper10min:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: BasicPrep10min.fif
+      - id: 1
+        function: mne_spectrum_array
+        args:
+          meeg: id.0
+          method: 'multitaper'
+          method_kwargs:
+            bandwidth : null
+            adaptive: False
+            low_bias: True
+            normalization: 'length'
+            remove_dc: True
+            output: 'power'
+
+  SpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        feature: SpectrumArrayMultitaper5seg.nc
+      - id: 2
+        function: extract_data_var
+        args:
+          xarray_data: id.1
+          data_var: 'spectrum'
+      - id: 3
+        function: aggregate_across_dimension
+        args:
+          xarray_data: id.2
+          dim: 'epochs'
+          operation: 'mean'
+          args : null
+
+  BandPowerSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: SpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: bandpower
+        args:
+          psd_like: id.0
+
+  BandRatiosSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: BandPowerSpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: band_ratios
+        args:
+          bandpower_like: id.0
+
+  FooofSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: SpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: fooof
+        args:
+          psd_like: id.0
+          freq_dim: 'frequencies'
+          fooof_options:
+            FOOOF:
+              aperiodic_mode: 'knee'
+            fit:
+              freq_range: [1, 90]
+            freq_res: 0.2
+            save:
+              save_results: True
+              save_settings: True
+              save_data: True
+          include_timings: True
+
+  FooofAperiodicSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: extract_data_var
+        args:
+          xarray_data: id.0
+          data_var: 'fooof'
+      - id: 2
+        function: fooof_component
+        args:
+          fooof_like: id.1
+          component: 'aperiodic'
+          freq_dim: 'frequencies'
+
+  FooofPeriodicSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: extract_data_var
+        args:
+          xarray_data: id.0
+          data_var: 'fooof'
+      - id: 2
+        function: fooof_component
+        args:
+          fooof_like: id.1
+          component: 'periodic'
+          freq_dim: 'frequencies'
+
+  FooofResidualSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: extract_data_var
+        args:
+          xarray_data: id.0
+          data_var: 'fooof'
+      - id: 2
+        function: fooof_component
+        args:
+          fooof_like: id.1
+          component: 'residual'
+          freq_dim: 'frequencies'
+
+  FooofAllSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: extract_data_var
+        args:
+          xarray_data: id.0
+          data_var: 'fooof'
+      - id: 2
+        function: fooof_component
+        args:
+          fooof_like: id.1
+          component: 'all'
+          freq_dim: 'frequencies'
+
+  FooofScalarsAllSpectrumArrayWelchEpochsAverage5seg:
+    overwrite: False
+    flow:
+      - id: 0
+        feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
+      - id: 1
+        function: extract_data_var
+        args:
+          xarray_data: id.0
+          data_var: 'fooof'
+      - id: 2
+        function: fooof_scalars
+        args:
+          fooof_like: id.1
+          component: 'all'
+          freq_dim: 'frequencies'
+
+FeatureList:
+  - BasicPrep5seg
+  - BasicPrep10min
+  - CheckLineFrequency
+  - MEEGMetadata
+  - SpectrumArrayMultitaper5seg
+  - SpectrumArrayMultitaper10min
+  - SpectrumArrayWelchEpochsAverage5seg
+  - BandPowerSpectrumArrayWelchEpochsAverage5seg
+  - BandRatiosSpectrumArrayWelchEpochsAverage5seg
+  - FooofSpectrumArrayWelchEpochsAverage5seg
+  - FooofAperiodicSpectrumArrayWelchEpochsAverage5seg
+  - FooofPeriodicSpectrumArrayWelchEpochsAverage5seg
+  - FooofResidualSpectrumArrayWelchEpochsAverage5seg
+  - FooofAllSpectrumArrayWelchEpochsAverage5seg
+  - FooofScalarsAllSpectrumArrayWelchEpochsAverage5seg

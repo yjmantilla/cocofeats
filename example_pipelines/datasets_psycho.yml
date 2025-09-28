@@ -1,0 +1,7 @@
+
+psychostimulants:
+  name: PsychoStimulants
+  file_pattern: 
+    local: "_data/psychostimulants/**/*.vhdr"
+  derivatives_path: 
+    local: "_outputs/psychostimulants"
