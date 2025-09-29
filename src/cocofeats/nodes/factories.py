@@ -142,10 +142,10 @@ def _ensure_dataarray(data_like: DataLike, *, context: str) -> xr.DataArray:
     if mne is not None and isinstance(data_like, mne.io.BaseRaw):
         data = data_like.get_data()
         coords = {
-            "channels": ("channels", list(data_like.ch_names)),
-            "time": ("time", data_like.times.copy()),
+            "spaces": ("spaces", list(data_like.ch_names)),
+            "times": ("times", data_like.times.copy()),
         }
-        arr = xr.DataArray(data, dims=("channels", "time"), coords=coords)
+        arr = xr.DataArray(data, dims=("spaces", "times"), coords=coords)
         arr.attrs.setdefault(
             "metadata",
             json.dumps(
@@ -163,10 +163,10 @@ def _ensure_dataarray(data_like: DataLike, *, context: str) -> xr.DataArray:
         data = data_like.get_data()
         coords = {
             "epochs": ("epochs", np.arange(data.shape[0])),
-            "channels": ("channels", list(data_like.ch_names)),
-            "time": ("time", data_like.times.copy()),
+            "spaces": ("spaces", list(data_like.ch_names)),
+            "times": ("times", data_like.times.copy()),
         }
-        arr = xr.DataArray(data, dims=("epochs", "channels", "time"), coords=coords)
+        arr = xr.DataArray(data, dims=("epochs", "spaces", "times"), coords=coords)
         arr.attrs.setdefault(
             "metadata",
             json.dumps(

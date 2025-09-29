@@ -21,21 +21,21 @@ def _make_dataarray() -> xr.DataArray:
     data = np.arange(12, dtype=float).reshape(3, 4)
     return xr.DataArray(
         data,
-        dims=("channels", "time"),
+        dims=("spaces", "times"),
         coords={
-            "channels": ["C3", "Cz", "C4"],
-            "time": np.linspace(0.0, 0.3, 4),
+            "spaces": ["C3", "Cz", "C4"],
+            "times": np.linspace(0.0, 0.3, 4),
         },
     )
 
 
 def test_apply_1d_scalar_output() -> None:
     arr = _make_dataarray()
-    result = apply_1d(arr, dim="time", pure_function=np.mean)
+    result = apply_1d(arr, dim="times", pure_function=np.mean)
 
     assert isinstance(result, xr.DataArray)
-    assert result.dims == ("channels",)
-    assert_allclose(result.values, arr.mean(dim="time").values)
+    assert result.dims == ("spaces",)
+    assert_allclose(result.values, arr.mean(dim="times").values)
 
 
 def test_apply_1d_sequence_output_with_coords() -> None:
@@ -46,16 +46,16 @@ def test_apply_1d_sequence_output_with_coords() -> None:
 
     result = apply_1d(
         arr,
-        dim="time",
+        dim="times",
         pure_function=stats,
         result_dim="stat",
         result_coords=("mean", "std"),
     )
 
     assert isinstance(result, xr.DataArray)
-    assert result.dims == ("channels", "stat")
+    assert result.dims == ("spaces", "stat")
     assert list(result.coords["stat"].values) == ["mean", "std"]
-    assert_allclose(result.sel(stat="mean").values, arr.mean(dim="time").values)
+    assert_allclose(result.sel(stat="mean").values, arr.mean(dim="times").values)
 
 
 def test_iterative_mode_matches_vectorized_and_reports_timings() -> None:
@@ -66,7 +66,7 @@ def test_iterative_mode_matches_vectorized_and_reports_timings() -> None:
 
     vector_result = apply_1d(
         arr,
-        dim="time",
+        dim="times",
         pure_function=stats,
         result_dim="stat",
         result_coords=("sum", "mean"),
@@ -74,7 +74,7 @@ def test_iterative_mode_matches_vectorized_and_reports_timings() -> None:
     )
     iterative_result = apply_1d(
         arr,
-        dim="time",
+        dim="times",
         pure_function=stats,
         result_dim="stat",
         result_coords=("sum", "mean"),
@@ -99,11 +99,11 @@ def test_apply_1d_accepts_noderesult_input() -> None:
     arr = _make_dataarray()
     node_input = NodeResult({".nc": Artifact(item=arr, writer=lambda path: arr.to_netcdf(path))})
 
-    result = apply_1d(node_input, dim="time", pure_function=np.mean)
+    result = apply_1d(node_input, dim="times", pure_function=np.mean)
 
     assert isinstance(result, xr.DataArray)
     assert result.shape == (3,)
-    assert_allclose(result.values, arr.mean(dim="time").values)
+    assert_allclose(result.values, arr.mean(dim="times").values)
 
 
 @pytest.mark.skipif(mne is None, reason="mne not available")
@@ -118,10 +118,10 @@ def test_apply_1d_handles_mne_raw() -> None:
     info = mne.create_info(ch_names=["C3", "C4"], sfreq=sfreq, ch_types="eeg")
     raw = mne.io.RawArray(data, info, verbose="error")
 
-    result = apply_1d(raw, dim="time", pure_function=np.mean)
+    result = apply_1d(raw, dim="times", pure_function=np.mean)
 
     assert isinstance(result, xr.DataArray)
-    assert result.dims == ("channels",)
+    assert result.dims == ("spaces",)
     expected = raw.get_data().mean(axis=1)
     assert_allclose(result.values, expected)
 
@@ -130,11 +130,11 @@ def test_xarray_factory_registered_node_supports_dotted_path() -> None:
     node = get_node("xarray_factory")
     arr = _make_dataarray()
 
-    result = node(arr, dim="time", pure_function="numpy.mean")
+    result = node(arr, dim="times", pure_function="numpy.mean")
     out = result.artifacts[".nc"].item
 
-    assert out.dims == ("channels",)
-    assert_allclose(out.values, arr.mean(dim="time").values)
+    assert out.dims == ("spaces",)
+    assert_allclose(out.values, arr.mean(dim="times").values)
 
 
 def test_apply_1d_raises_on_missing_dimension() -> None:
@@ -148,7 +148,7 @@ def test_apply_1d_invalid_mode() -> None:
     arr = _make_dataarray()
 
     with pytest.raises(ValueError):
-        apply_1d(arr, dim="time", pure_function=np.mean, mode="invalid")
+        apply_1d(arr, dim="times", pure_function=np.mean, mode="invalid")
 
 
 def test_apply_1d_raises_on_bad_result_coords_length() -> None:
@@ -160,7 +160,7 @@ def test_apply_1d_raises_on_bad_result_coords_length() -> None:
     with pytest.raises(ValueError):
         apply_1d(
             arr,
-            dim="time",
+            dim="times",
             pure_function=stats,
             result_dim="stat",
             result_coords=("mean",),

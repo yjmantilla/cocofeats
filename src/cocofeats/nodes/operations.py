@@ -14,6 +14,29 @@ import numpy as np
 
 log = get_logger(__name__)
 
+def binarize_with_median(data: xr.DataArray, dim: str) -> xr.DataArray:
+    """
+    Binarize an xarray DataArray along a specified dimension using the median value.
+
+    Parameters
+    ----------
+    data : xarray.DataArray
+        The input xarray DataArray.
+    dim : str
+        The dimension name to binarize over.
+
+    Returns
+    -------
+    xr.DataArray
+        A binarized xarray DataArray where values above the median are 1 and others are 0.
+    """
+    if not isinstance(data, xr.DataArray):
+        raise ValueError("Input must be an xarray DataArray.")
+
+    median_values = data.median(dim=dim, keep_attrs=True)
+    binarized_data = (data > median_values).astype(int)
+
+    return binarized_data
 
 @register_node(name="mean_across_dimension", override=True)
 def mean_across_dimension(xarray_data, dim):
@@ -190,12 +213,12 @@ if __name__ == "__main__":
     import numpy as np
     # Example usage
     # Example usage
-    data = xr.DataArray(np.random.rand(4, 3, 2), dims=("time", "channel", "frequency"), coords={
-        "time": np.arange(4),
+    data = xr.DataArray(np.random.rand(4, 3, 2), dims=("times", "channel", "frequency"), coords={
+        "times": np.arange(4),
         "channel": ["Cz", "Pz", "Fz"],
         "frequency": [10, 20]
     })
-    result = mean_across_dimension(data, dim="time")
+    result = mean_across_dimension(data, dim="times")
     print(result)
 
     # test aggregate
@@ -203,6 +226,6 @@ if __name__ == "__main__":
     print(result_agg)
 
     # test slice
-    result_slice = slice_xarray(data, dim="time", start=1, end=3)
+    result_slice = slice_xarray(data, dim="times", start=1, end=3)
     print(result_slice)
     print(result_slice.artifacts[".nc"].item)  # Access the sliced xarray

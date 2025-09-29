@@ -119,19 +119,19 @@ def extract_meeg_metadata(mne_object) -> NodeResult:
     shape = ()
 
     if isinstance(mne_object, mne.io.BaseRaw):
-        dims = ["time", "channels"]
+        dims = ["times", "spaces"]
         n_times = mne_object.n_times
         shape = (n_times, len(info_dict["ch_names"]))
-        coords["time"] = {'start': float(mne_object.times[0]), 'stop': float(mne_object.times[-1]), 'n_times': n_times, 'delta': float(mne_object.times[1] - mne_object.times[0])}
-        coords["channels"] = info_dict["ch_names"]
+        coords["times"] = {'start': float(mne_object.times[0]), 'stop': float(mne_object.times[-1]), 'n_times': n_times, 'delta': float(mne_object.times[1] - mne_object.times[0])}
+        coords["spaces"] = info_dict["ch_names"]
 
     elif isinstance(mne_object, mne.Epochs):
-        dims = ["epochs", "time", "channels"]
+        dims = ["epochs", "times", "spaces"]
         n_epochs, n_channels, n_times = mne_object.get_data().shape
         shape = (n_epochs, n_times, n_channels)
         coords["epochs"] = list(range(n_epochs))
-        coords["time"] = {'start': float(mne_object.times[0]), 'stop': float(mne_object.times[-1]), 'n_times': n_times, 'delta': float(mne_object.times[1] - mne_object.times[0])}
-        coords["channels"] = info_dict["ch_names"]
+        coords["times"] = {'start': float(mne_object.times[0]), 'stop': float(mne_object.times[-1]), 'n_times': n_times, 'delta': float(mne_object.times[1] - mne_object.times[0])}
+        coords["spaces"] = info_dict["ch_names"]
 
         # Add event info if available
         if hasattr(mne_object, "events"):
@@ -180,14 +180,14 @@ def meeg_to_xarray(mne_object) -> NodeResult:
         data = mne_object.get_data()
         ch_names = list(mne_object.info.get("ch_names", []))
         coords = {
-            "channels": ("channels", ch_names),
-            "time": ("time", mne_object.times.copy()),
+            "spaces": ("spaces", ch_names),
+            "times": ("times", mne_object.times.copy()),
         }
         channel_types = mne_object.get_channel_types()
         if channel_types:
-            coords["channel_type"] = ("channels", channel_types)
+            coords["channel_type"] = ("spaces", channel_types)
 
-        dims = ("channels", "time")
+        dims = ("spaces", "times")
         metadata_payload = _build_metadata(
             mne_object,
             kind="raw",
@@ -203,12 +203,12 @@ def meeg_to_xarray(mne_object) -> NodeResult:
         ch_names = list(mne_object.ch_names)
         coords = {
             "epochs": ("epochs", list(range(data.shape[0]))),
-            "channels": ("channels", ch_names),
-            "time": ("time", mne_object.times.copy()),
+            "spaces": ("spaces", ch_names),
+            "times": ("times", mne_object.times.copy()),
         }
         channel_types = mne_object.get_channel_types()
         if channel_types:
-            coords["channel_type"] = ("channels", channel_types)
+            coords["channel_type"] = ("spaces", channel_types)
 
         if getattr(mne_object, "events", None) is not None:
             events = mne_object.events
@@ -220,7 +220,7 @@ def meeg_to_xarray(mne_object) -> NodeResult:
                 [id_to_name.get(event, str(event)) for event in events[:, 2]],
             )
 
-        dims = ("epochs", "channels", "time")
+        dims = ("epochs", "spaces", "times")
         metadata_payload = _build_metadata(
             mne_object,
             kind="epochs",
