@@ -23,6 +23,7 @@ import json
 import os
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
+import time
 
 try:  # pragma: no cover - optional dependency
     import mne
@@ -234,7 +235,6 @@ def _vectorised_apply(
                 f"Input dimension '{axis}' has size zero; cannot evaluate pure function across slices."
             )
 
-    # Use the first slice to infer output structure and dtype.
     selector = {d: 0 for d in other_dims}
     sample_vector = np.asarray(data_xr.isel(selector).data)
     if sample_vector.ndim != 1:
@@ -269,27 +269,16 @@ def _vectorised_apply(
         first_shape = ()
 
     def _wrapped(vector: np.ndarray) -> np.ndarray:
-        # ``vector`` arrives as numpy thanks to xarray.apply_ufunc vectorisation.
         flat = np.asarray(vector)
         if flat.ndim != 1:
             flat = flat.reshape(-1)
-        start = time.perf_counter()
         output = func(flat, *args, **kwargs)
-        end = time.perf_counter()
-        duration = end - start
-        log.debug(
-            "Applied pure function",
-            function=getattr(func, "__name__", repr(func)),
-            input_shape=flat.shape,
-            output_type=type(output).__name__,
-            duration=duration,
-        )
         result_array, scalar_flag = _normalise_result(output, dtype=inferred_dtype)
         if scalar_flag != is_scalar:
             raise _FactoryError("Pure function returned inconsistent scalar/non-scalar outputs.")
         if not scalar_flag and result_array.shape != first_shape:
             raise _FactoryError("Pure function returned sequences of varying length.")
-        return result_array,duration
+        return result_array
 
     apply_kwargs: dict[str, Any] = {
         "input_core_dims": [[dim]],
@@ -301,10 +290,9 @@ def _vectorised_apply(
     }
     if output_sizes:
         apply_kwargs["output_sizes"] = output_sizes
-    
-    result_da,duration = xr.apply_ufunc(_wrapped, data_xr, **apply_kwargs)
 
-    # Reorder dimensions so the replacement dim occupies the original slot.
+    result_da = xr.apply_ufunc(_wrapped, data_xr, **apply_kwargs)
+
     input_dims = list(data_xr.dims)
     if result_dim_name is None:
         target_dims = [d for d in input_dims if d != dim]
@@ -321,6 +309,7 @@ def _vectorised_apply(
             result_da = result_da.assign_coords({result_dim_name: np.arange(first_shape[0])})
 
     metadata = {
+        "mode": "vectorized",
         "factory": "xarray_factory",
         "dimension": dim,
         "is_scalar": is_scalar,
@@ -332,10 +321,154 @@ def _vectorised_apply(
         "output_shape": [int(result_da.sizes[d]) for d in result_da.dims],
         "function": getattr(func, "__name__", repr(func)),
         "function_module": getattr(func, "__module__", None),
-        "total_time": duration,
     }
 
     return result_da, metadata
+
+
+def _iterative_apply(
+    data_xr: xr.DataArray,
+    *,
+    dim: str,
+    func: CallableLike,
+    args: Sequence[Any],
+    kwargs: Mapping[str, Any],
+    result_dim: str | None,
+    result_coords: Sequence[Any] | None,
+    output_dtype: np.dtype | None,
+) -> tuple[xr.DataArray, dict[str, Any], xr.DataArray]:
+    """Iteratively apply a 1-D function along ``dim`` and capture timings."""
+
+    if dim not in data_xr.dims:
+        raise _FactoryError(
+            f"Requested dimension '{dim}' not found in input dims {tuple(data_xr.dims)}."
+        )
+
+    if data_xr.sizes[dim] == 0:
+        raise _FactoryError(f"Input dimension '{dim}' has size zero; cannot build 1-D slices.")
+
+    for axis in data_xr.dims:
+        if axis != dim and data_xr.sizes[axis] == 0:
+            raise _FactoryError(
+                f"Input dimension '{axis}' has size zero; cannot evaluate pure function across slices."
+            )
+
+    input_dims = list(data_xr.dims)
+    other_dims = [d for d in input_dims if d != dim]
+    ordered_dims = other_dims + [dim]
+    target_length = data_xr.sizes[dim]
+
+    arr = data_xr.transpose(*ordered_dims).values
+    flat = arr.reshape((-1, target_length))
+
+    if flat.size == 0:
+        raise _FactoryError("Cannot apply factory to empty arrays.")
+
+    first_output = func(flat[0], *args, **kwargs)
+    inferred_dtype = np.dtype(output_dtype) if output_dtype is not None else None
+    first_array, is_scalar = _normalise_result(first_output, dtype=inferred_dtype)
+
+    if inferred_dtype is None:
+        inferred_dtype = first_array.dtype
+
+    if not is_scalar:
+        if first_array.ndim != 1:
+            raise _FactoryError("Non-scalar outputs must be one-dimensional sequences.")
+        result_dim_name = result_dim or "outputs"
+        result_length = int(first_array.shape[0])
+        if result_length == 0:
+            raise _FactoryError("Pure function returned an empty sequence; cannot build outputs.")
+        if result_coords is not None and len(tuple(result_coords)) != result_length:
+            raise _FactoryError(
+                "Length of result_coords does not match the function output length."
+            )
+    else:
+        result_dim_name = None
+        result_length = None
+
+    if is_scalar:
+        target_dims = [d for d in input_dims if d != dim]
+    else:
+        target_dims = [result_dim_name if d == dim else d for d in input_dims]
+
+    output_shape: list[int] = []
+    for dim_name in target_dims:
+        if dim_name == result_dim_name:
+            output_shape.append(result_length)  # type: ignore[arg-type]
+        else:
+            output_shape.append(int(data_xr.sizes[dim_name]))
+
+    result_storage = np.empty(tuple(output_shape), dtype=inferred_dtype)
+    timing_storage = np.empty(tuple(output_shape), dtype=float)
+
+    if other_dims:
+        index_iter = np.ndindex(*(data_xr.sizes[d] for d in other_dims))
+    else:
+        index_iter = iter([()])
+
+    first_checked = False
+    for base_index, vector in zip(index_iter, flat):
+        start = time.perf_counter()
+        output = func(vector, *args, **kwargs)
+        duration = time.perf_counter() - start
+        result_array, scalar_flag = _normalise_result(output, dtype=inferred_dtype)
+
+        if not first_checked:
+            if scalar_flag != is_scalar:
+                raise _FactoryError("Pure function returned inconsistent scalar/non-scalar outputs.")
+            if not scalar_flag and result_array.shape != first_array.shape:
+                raise _FactoryError("Pure function returned sequences of varying length.")
+            first_checked = True
+
+        index_by_dim = {name: idx for name, idx in zip(other_dims, base_index)}
+        target_index: list[Any] = []
+        for dim_name in target_dims:
+            if dim_name == result_dim_name:
+                target_index.append(slice(None))
+            else:
+                target_index.append(index_by_dim.get(dim_name, 0))
+
+        key = tuple(target_index)
+
+        if is_scalar:
+            result_storage[key] = result_array.item()
+            timing_storage[key] = duration
+        else:
+            result_storage[key] = result_array
+            timing_storage[key] = np.full(result_array.shape, duration, dtype=float)
+
+    coords: dict[str, Any] = {}
+    for dim_name in target_dims:
+        if dim_name == result_dim_name:
+            if result_coords is not None:
+                coords[dim_name] = (dim_name, list(result_coords))
+            else:
+                coords[dim_name] = (dim_name, np.arange(result_length))  # type: ignore[arg-type]
+        elif dim_name in data_xr.coords:
+            coords[dim_name] = data_xr.coords[dim_name]
+
+    result_da = xr.DataArray(result_storage, dims=target_dims)
+    timing_da = xr.DataArray(timing_storage, dims=target_dims)
+    if coords:
+        result_da = result_da.assign_coords(coords)
+        timing_da = timing_da.assign_coords(coords)
+
+    metadata = {
+        "mode": "iterative",
+        "factory": "xarray_factory",
+        "dimension": dim,
+        "is_scalar": is_scalar,
+        "result_dimension": result_dim_name,
+        "result_length": result_length,
+        "input_dims": list(data_xr.dims),
+        "input_shape": [int(data_xr.sizes[d]) for d in data_xr.dims],
+        "output_dims": list(result_da.dims),
+        "output_shape": [int(result_da.sizes[d]) for d in result_da.dims],
+        "function": getattr(func, "__name__", repr(func)),
+        "function_module": getattr(func, "__module__", None),
+    }
+
+    return result_da, metadata, timing_da
 
 
 def apply_1d(
@@ -350,6 +483,7 @@ def apply_1d(
     output_dtype: Any | None = None,
     metadata: Mapping[str, Any] | None = None,
     keep_input_metadata: bool = True,
+    mode: str = "vectorized",
 ) -> NodeResult:
     """Apply a 1-D pure function across a chosen xarray dimension.
 
@@ -378,6 +512,10 @@ def apply_1d(
     keep_input_metadata
         When ``True`` (default) and the input carries a ``metadata`` attribute,
         it is nested under ``source_metadata`` in the output metadata.
+    mode
+        Execution strategy. ``"vectorized"`` (default) leverages
+        :func:`xarray.apply_ufunc`, while ``"iterative"`` performs a Python loop
+        and records per-slice timings (stored in metadata).
     """
 
     func = _resolve_callable(pure_function)
@@ -385,16 +523,36 @@ def apply_1d(
     kwargs = dict(kwargs or {})
 
     data_xr = _ensure_dataarray(data_like, context="apply_1d")
-    result_da, auto_metadata = _vectorised_apply(
-        data_xr,
-        dim=dim,
-        func=func,
-        args=args,
-        kwargs=kwargs,
-        result_dim=result_dim,
-        result_coords=result_coords,
-        output_dtype=np.dtype(output_dtype) if output_dtype is not None else None,
-    )
+
+    normalised_mode = mode.lower()
+    if normalised_mode not in {"vectorized", "iterative"}:
+        raise ValueError("mode must be either 'vectorized' or 'iterative'.")
+
+    dtype_override = np.dtype(output_dtype) if output_dtype is not None else None
+
+    if normalised_mode == "vectorized":
+        result_da, auto_metadata = _vectorised_apply(
+            data_xr,
+            dim=dim,
+            func=func,
+            args=args,
+            kwargs=kwargs,
+            result_dim=result_dim,
+            result_coords=result_coords,
+            output_dtype=dtype_override,
+        )
+        timing_da: xr.DataArray | None = None
+    else:
+        result_da, auto_metadata, timing_da = _iterative_apply(
+            data_xr,
+            dim=dim,
+            func=func,
+            args=args,
+            kwargs=kwargs,
+            result_dim=result_dim,
+            result_coords=result_coords,
+            output_dtype=dtype_override,
+        )
 
     combined_metadata = dict(auto_metadata)
     if args:
@@ -405,6 +563,9 @@ def apply_1d(
         combined_metadata.update({str(k): _json_safe(v) for k, v in metadata.items()})
     if keep_input_metadata and "metadata" in data_xr.attrs:
         combined_metadata["source_metadata"] = data_xr.attrs["metadata"]
+    if timing_da is not None:
+        combined_metadata["per_slice_duration"] = _json_safe(timing_da)
+        combined_metadata["per_slice_duration_unit"] = "seconds"
 
     result_da.attrs["metadata"] = json.dumps(combined_metadata, indent=2, default=_json_safe)
 
@@ -430,6 +591,7 @@ def xarray_factory(
     output_dtype: Any | None = None,
     metadata: Mapping[str, Any] | None = None,
     keep_input_metadata: bool = True,
+    mode: str = "vectorized",
 ) -> NodeResult:
     """Node entry-point delegating to :func:`apply_1d`.
 
@@ -449,6 +611,7 @@ def xarray_factory(
         output_dtype=output_dtype,
         metadata=metadata,
         keep_input_metadata=keep_input_metadata,
+        mode=mode,
     )
 
 

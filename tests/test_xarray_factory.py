@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
 import xarray as xr
@@ -57,6 +59,44 @@ def test_apply_1d_sequence_output_with_coords() -> None:
     assert_allclose(out.sel(stat="mean").values, arr.mean(dim="time").values)
 
 
+def test_iterative_mode_matches_vectorized_and_reports_timings() -> None:
+    arr = _make_dataarray()
+
+    def stats(vector: np.ndarray) -> np.ndarray:
+        return np.array([vector.sum(), vector.mean()])
+
+    vector_result = apply_1d(
+        arr,
+        dim="time",
+        pure_function=stats,
+        result_dim="stat",
+        result_coords=("sum", "mean"),
+        mode="vectorized",
+    )
+    iterative_result = apply_1d(
+        arr,
+        dim="time",
+        pure_function=stats,
+        result_dim="stat",
+        result_coords=("sum", "mean"),
+        mode="iterative",
+    )
+
+    iterative_da = iterative_result.artifacts[".nc"].item
+    vector_da = vector_result.artifacts[".nc"].item
+
+    assert_allclose(iterative_da.values, vector_da.values)
+
+    metadata = json.loads(iterative_da.attrs["metadata"])
+    assert metadata["mode"] == "iterative"
+    assert metadata["per_slice_duration_unit"] == "seconds"
+
+    timing_da = xr.DataArray.from_dict(metadata["per_slice_duration"])
+    assert timing_da.dims == iterative_da.dims
+    assert timing_da.shape == iterative_da.shape
+    assert np.all(timing_da.values >= 0.0)
+
+
 def test_apply_1d_accepts_noderesult_input() -> None:
     arr = _make_dataarray()
     node_input = NodeResult({".nc": Artifact(item=arr, writer=lambda path: arr.to_netcdf(path))})
@@ -104,6 +144,13 @@ def test_apply_1d_raises_on_missing_dimension() -> None:
 
     with pytest.raises(ValueError):
         apply_1d(arr, dim="frequency", pure_function=np.mean)
+
+
+def test_apply_1d_invalid_mode() -> None:
+    arr = _make_dataarray()
+
+    with pytest.raises(ValueError):
+        apply_1d(arr, dim="time", pure_function=np.mean, mode="invalid")
 
 
 def test_apply_1d_raises_on_bad_result_coords_length() -> None:
