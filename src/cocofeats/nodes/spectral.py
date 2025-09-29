@@ -109,9 +109,9 @@ def mne_spectrum(
         report.add_figure(spectra.plot(show=False), title="Spectrum")
         log.debug("MNEReport: computed report")
 
-    extra_artifact = Artifact(
-        item=report, writer=lambda path: report.save(path, overwrite=True, open_browser=False)
-    )
+        extra_artifact = Artifact(
+            item=report, writer=lambda path: report.save(path, overwrite=True, open_browser=False)
+        )
     if isinstance(meeg, mne.io.BaseRaw):
         this_xarray = xr.DataArray(
             data=spectra.get_data(),
