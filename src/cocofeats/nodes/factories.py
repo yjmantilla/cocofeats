@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 import numpy as np
 import xarray as xr
+import time
 
 from cocofeats.definitions import Artifact, NodeResult
 from cocofeats.loggers import get_logger
@@ -272,13 +273,23 @@ def _vectorised_apply(
         flat = np.asarray(vector)
         if flat.ndim != 1:
             flat = flat.reshape(-1)
+        start = time.perf_counter()
         output = func(flat, *args, **kwargs)
+        end = time.perf_counter()
+        duration = end - start
+        log.debug(
+            "Applied pure function",
+            function=getattr(func, "__name__", repr(func)),
+            input_shape=flat.shape,
+            output_type=type(output).__name__,
+            duration=duration,
+        )
         result_array, scalar_flag = _normalise_result(output, dtype=inferred_dtype)
         if scalar_flag != is_scalar:
             raise _FactoryError("Pure function returned inconsistent scalar/non-scalar outputs.")
         if not scalar_flag and result_array.shape != first_shape:
             raise _FactoryError("Pure function returned sequences of varying length.")
-        return result_array
+        return result_array,duration
 
     apply_kwargs: dict[str, Any] = {
         "input_core_dims": [[dim]],
@@ -290,8 +301,8 @@ def _vectorised_apply(
     }
     if output_sizes:
         apply_kwargs["output_sizes"] = output_sizes
-
-    result_da = xr.apply_ufunc(_wrapped, data_xr, **apply_kwargs)
+    
+    result_da,duration = xr.apply_ufunc(_wrapped, data_xr, **apply_kwargs)
 
     # Reorder dimensions so the replacement dim occupies the original slot.
     input_dims = list(data_xr.dims)
@@ -321,6 +332,7 @@ def _vectorised_apply(
         "output_shape": [int(result_da.sizes[d]) for d in result_da.dims],
         "function": getattr(func, "__name__", repr(func)),
         "function_module": getattr(func, "__module__", None),
+        "total_time": duration,
     }
 
     return result_da, metadata
