@@ -4,17 +4,17 @@ mount_point: local
 FeatureDefinitions:
   BasicPrep5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: SourceFile
       - id: 1
-        function: keep_channels
+        node: keep_channels
         args:
           mne_object: id.0
           channel_names: ["F4", "F8", "P3","T4", "F7", "T5", "C3", "A1", "T3", "Fz", "O1","F3", "O2", "Fp1", "P4", "Fp2", "Pz", "C4", "Cz", "T6", "A2"]
           save: False
       - id: 2
-        function: basic_preprocessing
+        node: basic_preprocessing
         args:
           mne_object: id.1
           resample: 200              # resample to 200 Hz
@@ -41,17 +41,17 @@ FeatureDefinitions:
 
   BasicPrep10min:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: SourceFile
       - id: 1
-        function: keep_channels
+        node: keep_channels
         args:
           mne_object: id.0
           channel_names: ["F4", "F8", "P3","T4", "F7", "T5", "C3", "A1", "T3", "Fz", "O1","F3", "O2", "Fp1", "P4", "Fp2", "Pz", "C4", "Cz", "T6", "A2"]
           save: False
       - id: 2
-        function: basic_preprocessing
+        node: basic_preprocessing
         args:
           mne_object: id.1
           resample: 200              # resample to 200 Hz
@@ -78,17 +78,17 @@ FeatureDefinitions:
 
   CheckLineFrequency:
     overwrite : False
-    flow:
+    nodes:
       - id: 0
         feature: SourceFile
       - id: 1
-        function: keep_channels
+        node: keep_channels
         args:
           mne_object: id.0
           channel_names: ["F4", "F8", "P3","T4", "F7", "T5", "C3", "A1", "T3", "Fz", "O1","F3", "O2", "Fp1", "P4", "Fp2", "Pz", "C4", "Cz", "T6", "A2"]
           save: False
       - id: 2
-        function: mne_spectrum
+        node: mne_spectrum
         args:
           meeg: id.1
           compute_psd_kwargs:
@@ -99,11 +99,11 @@ FeatureDefinitions:
 
   SpectrumArrayMultitaper5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        function: mne_spectrum_array
+        node: mne_spectrum_array
         args:
           meeg: id.0
           method: 'multitaper'
@@ -117,11 +117,11 @@ FeatureDefinitions:
 
   SpectrumArrayMultitaper10min:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: BasicPrep10min.fif
       - id: 1
-        function: mne_spectrum_array
+        node: mne_spectrum_array
         args:
           meeg: id.0
           method: 'multitaper'
@@ -135,18 +135,18 @@ FeatureDefinitions:
 
   SpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
         feature: SpectrumArrayMultitaper5seg.nc
       - id: 2
-        function: extract_data_var
+        node: extract_data_var
         args:
           dataset_like: id.1
           data_var: 'spectrum'
       - id: 3
-        function: aggregate_across_dimension
+        node: aggregate_across_dimension
         args:
           xarray_data: id.2
           dim: 'epochs'
@@ -155,31 +155,31 @@ FeatureDefinitions:
 
   BandPowerSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: SpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: bandpower
+        node: bandpower
         args:
           psd_like: id.0
 
   BandRatiosSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: BandPowerSpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: band_ratios
+        node: band_ratios
         args:
           bandpower_like: id.0
 
   FooofSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: SpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: fooof
+        node: fooof
         args:
           psd_like: id.0
           freq_dim: 'frequencies'
@@ -197,16 +197,16 @@ FeatureDefinitions:
 
   FooofAperiodicSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: extract_data_var
+        node: extract_data_var
         args:
           dataset_like: id.0
           data_var: 'fooof'
       - id: 2
-        function: fooof_component
+        node: fooof_component
         args:
           fooof_like: id.1
           component: 'aperiodic'
@@ -214,16 +214,16 @@ FeatureDefinitions:
 
   FooofPeriodicSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: extract_data_var
+        node: extract_data_var
         args:
           dataset_like: id.0
           data_var: 'fooof'
       - id: 2
-        function: fooof_component
+        node: fooof_component
         args:
           fooof_like: id.1
           component: 'periodic'
@@ -231,16 +231,16 @@ FeatureDefinitions:
 
   FooofResidualSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: extract_data_var
+        node: extract_data_var
         args:
           dataset_like: id.0
           data_var: 'fooof'
       - id: 2
-        function: fooof_component
+        node: fooof_component
         args:
           fooof_like: id.1
           component: 'residual'
@@ -248,16 +248,16 @@ FeatureDefinitions:
 
   FooofAllSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: extract_data_var
+        node: extract_data_var
         args:
           dataset_like: id.0
           data_var: 'fooof'
       - id: 2
-        function: fooof_component
+        node: fooof_component
         args:
           fooof_like: id.1
           component: 'all'
@@ -265,16 +265,16 @@ FeatureDefinitions:
 
   FooofScalarsAllSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
       - id: 1
-        function: extract_data_var
+        node: extract_data_var
         args:
           dataset_like: id.0
           data_var: 'fooof'
       - id: 2
-        function: fooof_scalars
+        node: fooof_scalars
         args:
           fooof_like: id.1
           component: 'all'

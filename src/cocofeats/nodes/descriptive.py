@@ -3,10 +3,10 @@ import os
 import mne
 import xarray as xr
 
-from cocofeats.definitions import Artifact, FeatureResult
+from cocofeats.definitions import Artifact, NodeResult
 from cocofeats.loaders import load_meeg
 from cocofeats.loggers import get_logger
-from . import register_feature
+from . import register_node
 
 from cocofeats.writers import _json_safe
 
@@ -74,8 +74,8 @@ def _build_metadata(mne_object, *, kind: str, extra: dict | None = None) -> dict
     return metadata
 
 
-@register_feature
-def extract_meeg_metadata(mne_object) -> FeatureResult:
+@register_node
+def extract_meeg_metadata(mne_object) -> NodeResult:
     """
     Extract metadata from an MNE object (Raw or Epochs) and save as JSON.
 
@@ -86,15 +86,15 @@ def extract_meeg_metadata(mne_object) -> FeatureResult:
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         A feature result containing a JSON artifact with metadata.
     """
 
-    if isinstance(mne_object, FeatureResult):
+    if isinstance(mne_object, NodeResult):
         if ".fif" in mne_object.artifacts:
             mne_object = mne_object.artifacts[".fif"].item
         else:
-            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
+            raise ValueError("NodeResult does not contain a .fif artifact to process.")
 
     if isinstance(mne_object, (str, os.PathLike)):
         mne_object = load_meeg(mne_object)
@@ -159,18 +159,18 @@ def extract_meeg_metadata(mne_object) -> FeatureResult:
 
     # also present a mne.report with the info?
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 
-@register_feature
-def meeg_to_xarray(mne_object) -> FeatureResult:
+@register_node
+def meeg_to_xarray(mne_object) -> NodeResult:
     """Convert an MNE Raw/Epochs object to an xarray DataArray artifact."""
 
-    if isinstance(mne_object, FeatureResult):
+    if isinstance(mne_object, NodeResult):
         if ".fif" in mne_object.artifacts:
             mne_object = mne_object.artifacts[".fif"].item
         else:
-            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
+            raise ValueError("NodeResult does not contain a .fif artifact to process.")
 
     if isinstance(mne_object, (str, os.PathLike)):
         mne_object = load_meeg(mne_object)
@@ -259,4 +259,4 @@ def meeg_to_xarray(mne_object) -> FeatureResult:
         ".nc": Artifact(item=xarray_data, writer=lambda path: xarray_data.to_netcdf(path)),
     }
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)

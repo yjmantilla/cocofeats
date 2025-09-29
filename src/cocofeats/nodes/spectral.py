@@ -13,12 +13,12 @@ import numpy as np
 import xarray as xr
 from fooof import FOOOF
 
-from cocofeats.definitions import Artifact, FeatureResult
+from cocofeats.definitions import Artifact, NodeResult
 from cocofeats.loaders import load_meeg
 from cocofeats.loggers import get_logger
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
-from . import register_feature
+from . import register_node
 from cocofeats.writers import _json_safe
 from cocofeats.utils import _resolve_eval_strings
 
@@ -36,33 +36,33 @@ DEFAULT_BANDS: dict[str, tuple[float, float]] = {
 
 
 def _resolve_psd_dataarray(
-    psd_like: FeatureResult | xr.DataArray | str | os.PathLike[str]
+    psd_like: NodeResult | xr.DataArray | str | os.PathLike[str]
 ) -> xr.DataArray:
     if isinstance(psd_like, xr.DataArray):
         return psd_like
 
-    if isinstance(psd_like, FeatureResult):
+    if isinstance(psd_like, NodeResult):
         if ".nc" not in psd_like.artifacts:
-            raise ValueError("FeatureResult does not contain a .nc artifact to process.")
+            raise ValueError("NodeResult does not contain a .nc artifact to process.")
         candidate = psd_like.artifacts[".nc"].item
         if isinstance(candidate, xr.DataArray):
             return candidate
         if isinstance(candidate, (str, os.PathLike)):
             return xr.open_dataarray(candidate)
-        raise ValueError("Unsupported artifact payload for .nc in FeatureResult.")
+        raise ValueError("Unsupported artifact payload for .nc in NodeResult.")
 
     if isinstance(psd_like, (str, os.PathLike)):
         return xr.open_dataarray(psd_like)
 
-    raise ValueError("Input must be a FeatureResult, xarray.DataArray, or path to netCDF artifact.")
+    raise ValueError("Input must be a NodeResult, xarray.DataArray, or path to netCDF artifact.")
 
 
-@register_feature
+@register_node
 def mne_spectrum(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
     compute_psd_kwargs: dict[str, Any] | None = None,
     extra_artifacts: bool = False,
-) -> FeatureResult:
+) -> NodeResult:
     """
     Compute the power spectral density of M/EEG data.
 
@@ -80,11 +80,11 @@ def mne_spectrum(
         A dictionary containing the power spectral density results, metadata, and artifacts (MNE Report).
     """
 
-    if isinstance(meeg, FeatureResult):
+    if isinstance(meeg, NodeResult):
         if ".fif" in meeg.artifacts:
             meeg = meeg.artifacts[".fif"].item
         else:
-            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
+            raise ValueError("NodeResult does not contain a .fif artifact to process.")
 
     if isinstance(meeg, str | os.PathLike):
         meeg = load_meeg(meeg)
@@ -148,16 +148,16 @@ def mne_spectrum(
     if extra_artifacts:
         artifacts[".report.html"] = extra_artifact
 
-    out = FeatureResult(artifacts=artifacts)
+    out = NodeResult(artifacts=artifacts)
     return out
 
 
-@register_feature
+@register_node
 def mne_spectrum_array(
     meeg: mne.io.BaseRaw | mne.BaseEpochs,
     method: str = "welch",
     method_kwargs: dict[str, Any] | None = None,
-) -> FeatureResult:
+) -> NodeResult:
     """Compute PSD from array data using Welch or multitaper algorithms.
 
     Parameters
@@ -171,7 +171,7 @@ def mne_spectrum_array(
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         An object containing the PSD as a ``.nc`` artifact (``xarray.Dataset``)
         plus metadata describing the output dimensions. When multitaper is used
         with ``output='complex'``, taper weights are included in the same
@@ -184,11 +184,11 @@ def mne_spectrum_array(
 
     method_kwargs = dict(method_kwargs or {})
 
-    if isinstance(meeg, FeatureResult):
+    if isinstance(meeg, NodeResult):
         if ".fif" in meeg.artifacts:
             meeg = meeg.artifacts[".fif"].item
         else:
-            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
+            raise ValueError("NodeResult does not contain a .fif artifact to process.")
 
     if isinstance(meeg, str | os.PathLike):
         meeg = load_meeg(meeg)
@@ -372,12 +372,12 @@ def mne_spectrum_array(
         ),
     }
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 
-@register_feature
+@register_node
 def fooof(
-    psd_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    psd_like: NodeResult | xr.DataArray | str | os.PathLike[str],
     *,
     freq_dim: str = "frequencies",
     freqs: Sequence[float] | np.ndarray | None = None,
@@ -385,12 +385,12 @@ def fooof(
     allow_eval_strings: bool = True,
     failure_value: str | None = "{}",
     include_timings: bool = True,
-) -> FeatureResult:
+) -> NodeResult:
     """Fit FOOOF models for every non-frequency slice in a PSD ``xarray`` artifact.
 
     Parameters
     ----------
-    psd_like : FeatureResult | xarray.DataArray | path-like
+    psd_like : NodeResult | xarray.DataArray | path-like
         Output from ``spectrum``/``spectrum_array`` or a compatible ``xarray`` artifact.
     freq_dim : str, optional
         Name of the frequency dimension. Defaults to ``"frequencies"``.
@@ -410,7 +410,7 @@ def fooof(
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         ``.nc`` artifact containing an ``xarray.Dataset`` with the FOOOF
         payloads stored under the ``fooof`` variable and, when requested,
         timings under ``timings``.
@@ -623,23 +623,23 @@ def fooof(
         )
     }
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 
 
 
-@register_feature
+@register_node
 def fooof_scalars(
-    fooof_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    fooof_like: NodeResult | xr.DataArray | str | os.PathLike[str],
     *,
     component: Literal["aperiodic_params", "r_squared", "error", "all"] = "aperiodic_params",
     freq_dim: str = "frequencies",
-) -> FeatureResult:
+) -> NodeResult:
     """Extract scalar outputs from serialized FOOOF models.
 
     Parameters
     ----------
-    fooof_like : FeatureResult | xarray.DataArray | path-like
+    fooof_like : NodeResult | xarray.DataArray | path-like
         Artifact generated by :func:`fooof`, containing JSON strings per slice.
     component : {"aperiodic_params", "r_squared", "error", "all"}, optional
         Which FOOOF scalar to extract. ``aperiodic_params`` returns offset/(knee)/exponent
@@ -651,7 +651,7 @@ def fooof_scalars(
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         ``.nc`` artifact(s) containing the requested scalar(s).
     """
 
@@ -813,20 +813,20 @@ def fooof_scalars(
                 )
             }
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
-@register_feature
+@register_node
 def fooof_component(
-    fooof_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    fooof_like: NodeResult | xr.DataArray | str | os.PathLike[str],
     *,
     component: Literal["aperiodic", "periodic", "residual", "all"] = "aperiodic",
     freq_dim: str = "frequencies",
-) -> FeatureResult:
+) -> NodeResult:
     """Derive linear-space components directly from serialized FOOOF models.
 
     Parameters
     ----------
-    fooof_like : FeatureResult | xarray.DataArray | path-like
+    fooof_like : NodeResult | xarray.DataArray | path-like
         Artifact generated by :func:`fooof`, containing JSON strings per slice.
     component : {"aperiodic", "periodic", "residual", "all"}, optional
         ``aperiodic`` returns the FOOOF background spectrum, ``periodic`` returns
@@ -838,7 +838,7 @@ def fooof_component(
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         ``.nc`` artifact with the requested component in linear power units.
     """
 
@@ -992,22 +992,22 @@ def fooof_component(
             )
         }
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 
-@register_feature
+@register_node
 def bandpower(
-    psd_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    psd_like: NodeResult | xr.DataArray | str | os.PathLike[str],
     *,
     bands: Mapping[str, tuple[float, float]] | None = None,
     freq_dim: str = "frequencies",
     relative: bool = False,
-) -> FeatureResult:
+) -> NodeResult:
     """Compute absolute or relative band power from a PSD ``xarray.DataArray``.
 
     Parameters
     ----------
-    psd_like : FeatureResult | xarray.DataArray | path-like
+    psd_like : NodeResult | xarray.DataArray | path-like
         Output from ``spectrum``/``spectrum_array`` or a compatible ``xarray`` artifact.
     bands : mapping, optional
         Frequency bands as ``{"label": (low, high)}``. If omitted ``DEFAULT_BANDS`` is used.
@@ -1018,7 +1018,7 @@ def bandpower(
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         ``.nc`` artifact whose ``freq_dim`` is replaced by ``freqbands`` containing band powers.
     """
 
@@ -1108,22 +1108,22 @@ def bandpower(
         ".nc": Artifact(item=band_power_xr, writer=lambda path: band_power_xr.to_netcdf(path)),
     }
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 
-@register_feature
+@register_node
 def band_ratios(
-    bandpower_like: FeatureResult | xr.DataArray | str | os.PathLike[str],
+    bandpower_like: NodeResult | xr.DataArray | str | os.PathLike[str],
     *,
     freqband_dim: str = "freqbands",
     combinations: Sequence[tuple[str, str]] | None = None,
     eps: float | None = None,
-) -> FeatureResult:
+) -> NodeResult:
     """Compute ordered band power ratios from an ``xarray`` bandpower artifact.
 
     Parameters
     ----------
-    bandpower_like : FeatureResult | xarray.DataArray | path-like
+    bandpower_like : NodeResult | xarray.DataArray | path-like
         Output from :func:`bandpower` or a compatible ``xarray`` artifact that
         exposes a ``freqbands`` dimension.
     freqband_dim : str, optional
@@ -1138,7 +1138,7 @@ def band_ratios(
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         ``.nc`` artifact with ``freqband_dim`` replaced by ``freqbandPairs``.
     """
 
@@ -1226,4 +1226,4 @@ def band_ratios(
         ".nc": Artifact(item=ratio_xr, writer=lambda path: ratio_xr.to_netcdf(path)),
     }
 
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)

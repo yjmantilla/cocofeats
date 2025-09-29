@@ -24,7 +24,7 @@ class Artifact(NamedTuple):
     writer: Callable[[str], None]  # how to save it
 
 
-class FeatureResult(NamedTuple):
+class NodeResult(NamedTuple):
     artifacts: dict[str, Artifact]  # Objects with writers
 
 

@@ -59,29 +59,27 @@ print("All files with indices:", all_files)
 print("Common roots:", common_roots)
 
 # Now run the feature extraction
-from cocofeats.features import get_feature, list_features
+from cocofeats.nodes import get_node, list_nodes
 
-print("Registered features:", list_features())
+print("Registered nodes:", list_nodes())
 
 if False:
     for feature in ["spectrum", "basic_preprocessing"]:
         iterate_feature_pipeline(
             pipeline_configuration=pipeline_input,
-            feature=get_feature(feature),
+            feature=get_node(feature),
             max_files_per_dataset=2,
         )
 
-# 1) Load and register flows
-# 2) Use your existing iterate_feature_pipeline per flow name
-from cocofeats.features import get_feature
-from cocofeats.flows import get_flow
+# 1) Load and register features
+# 2) Use your existing iterate_feature_pipeline per feature name
 
 # "BasicPrep1", "CheckLineFrequency",
 # "BasicPrep1", "CheckLineFrequency", "InterFeatureDependence",
-for flow_name in ["SpectrumArrayWelch", "SpectrumArrayMultitaper",]:
+for feature_name in ["SpectrumArrayWelch", "SpectrumArrayMultitaper"]:
     df = iterate_feature_pipeline(
         pipeline_configuration=pipeline_input,
-        feature=flow_name,  # the thin wrapper
+        feature=feature_name,  # the thin wrapper
         max_files_per_dataset=None,
         dry_run = False,
         only_index = [3,5],

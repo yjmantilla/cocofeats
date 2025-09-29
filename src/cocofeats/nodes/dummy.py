@@ -1,10 +1,10 @@
-from cocofeats.definitions import Artifact, FeatureResult
+from cocofeats.definitions import Artifact, NodeResult
 
-from . import register_feature
+from . import register_node
 
 
-@register_feature
-def dummy(param1=None, param2=None) -> FeatureResult:
+@register_node
+def dummy(param1=None, param2=None) -> NodeResult:
     """
     A dummy feature extraction function that returns a simple message.
 
@@ -17,8 +17,8 @@ def dummy(param1=None, param2=None) -> FeatureResult:
 
     Returns
     -------
-    FeatureResult
-        A FeatureResult containing a simple message.
+    NodeResult
+        A NodeResult containing a simple message.
     """
     message = f"Dummy feature extraction completed with param1={param1} and param2={param2}"
 
@@ -28,6 +28,6 @@ def dummy(param1=None, param2=None) -> FeatureResult:
 
     artifacts = {".message.txt": Artifact(item=message, writer=lambda path: write_message(path))}
 
-    return FeatureResult(
+    return NodeResult(
         artifacts=artifacts,
     )

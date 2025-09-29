@@ -1,17 +1,18 @@
 import inspect
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, List
 
 from cocofeats.datasets import get_datasets_and_mount_point_from_pipeline_configuration
 from cocofeats.iterators import get_all_files_from_pipeline_configuration
 from cocofeats.loggers import get_logger
 from cocofeats.utils import get_path
+from cocofeats.nodes import get_node, list_nodes
 from cocofeats.features import get_feature, list_features
-from cocofeats.flows import get_flow, list_flows
-from cocofeats.dag import run_flow
+from cocofeats.dag import run_feature
 from cocofeats.loaders import load_configuration
-from cocofeats.flows.pipeline import register_flows_from_dict
+from cocofeats.features.pipeline import register_features_from_dict
 import pandas as pd
 log = get_logger(__name__)
 
@@ -48,9 +49,9 @@ def iterate_feature_pipeline(
     config_dict = load_configuration(pipeline_configuration) if isinstance(pipeline_configuration, str) else pipeline_configuration
 
     if "FeatureDefinitions" in config_dict:
-        register_flows_from_dict(config_dict)
+        register_features_from_dict(config_dict)
     else:
-        log.warning("No 'FeatureDefinitions' found in the configuration. Skipping flow registration.")
+        log.warning("No 'FeatureDefinitions' found in the configuration. Skipping feature registration.")
     datasets_configs, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(
         pipeline_configuration
     )
@@ -69,6 +70,31 @@ def iterate_feature_pipeline(
             log.warning("Missing indices will be ignored.", missing_indices=list(set(only_index if isinstance(only_index, list) else [only_index]) - set([item[0] for item in all_files])))
             log.warning("Proceeding with available indices.")
 
+    feature_entry = None
+    node_callable: Callable | None = None
+    feature_label = None
+
+    if isinstance(feature, str):
+        feature_label = feature
+        if feature in list_nodes():
+            node_callable = get_node(feature)
+        elif feature in list_features():
+            feature_entry = get_feature(feature)
+        else:
+            raise KeyError(f"Unknown feature or node '{feature}'")
+    elif hasattr(feature, "definition") and hasattr(feature, "func"):
+        feature_entry = feature
+        feature_label = feature.name
+    elif callable(feature):
+        node_callable = feature
+        feature_label = getattr(feature, "__name__", "<callable>")
+    else:
+        raise TypeError("feature must be a registered feature name, node name, FeatureEntry, or callable node")
+
+    node_parameters = {}
+    if node_callable is not None:
+        node_parameters = inspect.signature(node_callable).parameters
+
     for index, dataset_name, file_path in all_files:
         log.debug("Processing file", index=index, dataset=dataset_name, file_path=file_path)
         try:
@@ -84,40 +110,34 @@ def iterate_feature_pipeline(
                 os.makedirs(os.path.dirname(reference_base), exist_ok=True)
             else:
                 reference_base = file_path
-            extra_kwargs = {}
+            reference_base_path = Path(reference_base)
 
-            #feature(file_path, **extra_kwargs)
-            # if isinstance(feature, Callable):
-            #     feature(file_path, **extra_kwargs)
-            if isinstance(feature, str):
-                if feature in list_features():
-                    feature = get_feature(feature)
-                elif feature in list_flows():
-                    feature = get_flow(feature)
+            if node_callable is not None:
+                node_kwargs: dict[str, Any] = {}
+                if "reference_base" in node_parameters:
+                    node_kwargs["reference_base"] = reference_base
+                if "dataset_config" in node_parameters:
+                    node_kwargs["dataset_config"] = datasets_configs[dataset_name]
+                if "mount_point" in node_parameters:
+                    node_kwargs["mount_point"] = mount_point
 
-
-            if hasattr(feature, "func"):
-                signature = inspect.signature(feature.func).parameters
+                node_callable(file_path, **node_kwargs)
             else:
-                signature = inspect.signature(feature).parameters
-            if "reference_base" in signature:
-                extra_kwargs["reference_base"] = reference_base
-            if "dataset_config" in signature:
-                extra_kwargs["dataset_config"] = datasets_configs[dataset_name]
-            if "mount_point" in signature:
-                extra_kwargs["mount_point"] = mount_point
-
-            if feature.name in list_features():
-                feature(file_path, **extra_kwargs)
-            elif feature.name in list_flows():
-
-                result = run_flow(feature.definition, feature.name, file_path, **extra_kwargs, dry_run=dry_run)
+                result = run_feature(
+                    feature_entry.definition,
+                    feature_entry.name,
+                    file_path,
+                    reference_base=reference_base_path,
+                    dataset_config=datasets_configs[dataset_name],
+                    mount_point=mount_point,
+                    dry_run=dry_run,
+                )
                 if dry_run:
-
-                    res = {}
-                    res['index'] = index
-                    res['dataset'] = dataset_name
-                    res['file_path'] = file_path
+                    res = {
+                        "index": index,
+                        "dataset": dataset_name,
+                        "file_path": file_path,
+                    }
                     res.update(result)
                     log.info("Dry run:", **res)
                     dry_run_collection.append(res)
@@ -128,6 +148,7 @@ def iterate_feature_pipeline(
                 index=index,
                 dataset=dataset_name,
                 file_path=file_path,
+                feature=feature_label,
             )
         except Exception as e:
             log.error(

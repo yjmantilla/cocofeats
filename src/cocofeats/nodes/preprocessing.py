@@ -3,16 +3,16 @@ import os
 
 import mne
 
-from cocofeats.definitions import Artifact, FeatureResult
+from cocofeats.definitions import Artifact, NodeResult
 from cocofeats.loaders import load_meeg
 from cocofeats.loggers import get_logger
 
-from . import register_feature
+from . import register_node
 
 log = get_logger(__name__)
 
-@register_feature
-def keep_channels(mne_object, channel_names, save=False) -> FeatureResult:
+@register_node
+def keep_channels(mne_object, channel_names, save=False) -> NodeResult:
     if isinstance(mne_object, (str, os.PathLike)):
         mne_object = load_meeg(mne_object)
         log.debug("keep_channels: loaded MNE object from file", input=mne_object)
@@ -28,11 +28,11 @@ def keep_channels(mne_object, channel_names, save=False) -> FeatureResult:
         ".fif": Artifact(item=mne_object, writer=writer)
     }
 
-    out = FeatureResult(artifacts=artifacts)
+    out = NodeResult(artifacts=artifacts)
 
     return out
 
-@register_feature
+@register_node
 def basic_preprocessing(
     mne_object,
     resample=None,
@@ -40,13 +40,13 @@ def basic_preprocessing(
     epoch_config=None,
     notch_filter=None,
     extra_artifacts: bool = False,
-) -> FeatureResult:
+) -> NodeResult:
 
-    if isinstance(mne_object, FeatureResult):
+    if isinstance(mne_object, NodeResult):
         if ".fif" in mne_object.artifacts:
             mne_object = mne_object.artifacts[".fif"].item
         else:
-            raise ValueError("FeatureResult does not contain a .fif artifact to process.")
+            raise ValueError("NodeResult does not contain a .fif artifact to process.")
 
     if isinstance(mne_object, str | os.PathLike):
         mne_object = load_meeg(mne_object)
@@ -146,6 +146,6 @@ def basic_preprocessing(
             item=report, writer=lambda path: report.save(path, overwrite=True, open_browser=False)
         )
 
-    out = FeatureResult(artifacts=artifacts)
+    out = NodeResult(artifacts=artifacts)
 
     return out

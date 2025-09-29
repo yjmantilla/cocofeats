@@ -5,8 +5,8 @@ import xarray as xr
 
 from numpy.testing import assert_allclose
 
-from cocofeats.definitions import Artifact, FeatureResult
-from cocofeats.features.spectral import bandpower, band_ratios
+from cocofeats.definitions import Artifact, NodeResult
+from cocofeats.nodes.spectral import bandpower, band_ratios
 
 
 def _make_psd() -> xr.DataArray:
@@ -49,7 +49,7 @@ def test_bandpower_relative_normalisation() -> None:
 
 def test_bandpower_accepts_featureresult_input() -> None:
     psd = _make_psd()
-    feature_input = FeatureResult(
+    feature_input = NodeResult(
         artifacts={
             ".nc": Artifact(item=psd, writer=lambda path: psd.to_netcdf(path)),
         }
@@ -86,7 +86,7 @@ def test_band_ratios_handles_small_denominator() -> None:
             "freqbands": ["top", "zero"],
         },
     )
-    feature_input = FeatureResult(
+    feature_input = NodeResult(
         artifacts={
             ".nc": Artifact(item=band_da, writer=lambda path: band_da.to_netcdf(path)),
         }

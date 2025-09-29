@@ -3,11 +3,11 @@ import os
 
 import mne
 
-from cocofeats.definitions import Artifact, FeatureResult, PathLike
+from cocofeats.definitions import Artifact, NodeResult, PathLike
 from cocofeats.loggers import get_logger
 from cocofeats.writers import save_dict_to_json
 
-from cocofeats.features import register_feature
+from cocofeats.nodes import register_node
 import xarray as xr
 import numpy as np
 
@@ -15,7 +15,7 @@ import numpy as np
 log = get_logger(__name__)
 
 
-@register_feature(name="mean_across_dimension", override=True)
+@register_node(name="mean_across_dimension", override=True)
 def mean_across_dimension(xarray_data, dim):
     """
     Compute the mean across a specified dimension of an xarray DataArray.
@@ -29,7 +29,7 @@ def mean_across_dimension(xarray_data, dim):
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         A feature result containing the mean as a netcdf4 artifact.
     """
     import xarray as xr
@@ -42,16 +42,16 @@ def mean_across_dimension(xarray_data, dim):
 
     # return the new xarray in ncdf4 format
     artifacts = {".nc": Artifact(item=mean_data, writer=lambda path: mean_data.to_netcdf(path))}
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 
-@register_feature(name="extract_data_var", override=True)
+@register_node(name="extract_data_var", override=True)
 def extract_data_var(dataset_like, data_var: str):
     """Extract a named variable from an ``xarray.Dataset`` artifact.
 
     Parameters
     ----------
-    dataset_like : FeatureResult | xarray.Dataset | str | os.PathLike
+    dataset_like : NodeResult | xarray.Dataset | str | os.PathLike
         Source dataset or reference. Strings are interpreted as paths to
         NetCDF files containing an ``xarray.Dataset``.
     data_var : str
@@ -59,13 +59,13 @@ def extract_data_var(dataset_like, data_var: str):
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         A feature result containing the selected variable as a NetCDF artifact.
     """
 
-    if isinstance(dataset_like, FeatureResult):
+    if isinstance(dataset_like, NodeResult):
         if ".nc" not in dataset_like.artifacts:
-            raise ValueError("FeatureResult does not contain a .nc artifact to process.")
+            raise ValueError("NodeResult does not contain a .nc artifact to process.")
         dataset_like = dataset_like.artifacts[".nc"].item
 
     target_array = None
@@ -91,10 +91,10 @@ def extract_data_var(dataset_like, data_var: str):
         finally:
             ds.close()
     else:
-        raise ValueError("dataset_like must be a FeatureResult, Dataset, DataArray, or path.")
+        raise ValueError("dataset_like must be a NodeResult, Dataset, DataArray, or path.")
 
     artifacts = {".nc": Artifact(item=target_array, writer=lambda path: target_array.to_netcdf(path))}
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 
 def slice_xarray(xarray_data, dim, start=None, end=None):
@@ -114,7 +114,7 @@ def slice_xarray(xarray_data, dim, start=None, end=None):
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         A feature result containing the sliced data as a netcdf4 artifact.
     """
 
@@ -122,11 +122,11 @@ def slice_xarray(xarray_data, dim, start=None, end=None):
         xarray_data = xr.open_dataarray(xarray_data)
         log.debug("Loaded xarray DataArray from file", input=xarray_data)
 
-    if isinstance(xarray_data, FeatureResult):
+    if isinstance(xarray_data, NodeResult):
         if ".nc" in xarray_data.artifacts:
             xarray_data = xarray_data.artifacts[".nc"].item
         else:
-            raise ValueError("FeatureResult does not contain a .nc artifact to process.")
+            raise ValueError("NodeResult does not contain a .nc artifact to process.")
 
     if not isinstance(xarray_data, xr.DataArray):
         raise ValueError("Input must be an xarray DataArray.")
@@ -136,9 +136,9 @@ def slice_xarray(xarray_data, dim, start=None, end=None):
 
     # return the new xarray in ncdf4 format
     artifacts = {".nc": Artifact(item=sliced_data, writer=lambda path: sliced_data.to_netcdf(path))}
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
-@register_feature(name="aggregate_across_dimension", override=True)
+@register_node(name="aggregate_across_dimension", override=True)
 def aggregate_across_dimension(xarray_data, dim, operation='mean', args=None):
     """
     Aggregate data across a specified dimension of an xarray DataArray using a given operation.
@@ -156,7 +156,7 @@ def aggregate_across_dimension(xarray_data, dim, operation='mean', args=None):
 
     Returns
     -------
-    FeatureResult
+    NodeResult
         A feature result containing the aggregated data as a netcdf4 artifact.
     """
 
@@ -164,11 +164,11 @@ def aggregate_across_dimension(xarray_data, dim, operation='mean', args=None):
         xarray_data = xr.open_dataarray(xarray_data)
         log.debug("Loaded xarray DataArray from file", input=xarray_data)
 
-    if isinstance(xarray_data, FeatureResult):
+    if isinstance(xarray_data, NodeResult):
         if ".nc" in xarray_data.artifacts:
             xarray_data = xarray_data.artifacts[".nc"].item
         else:
-            raise ValueError("FeatureResult does not contain a .nc artifact to process.")
+            raise ValueError("NodeResult does not contain a .nc artifact to process.")
 
     if not isinstance(xarray_data, xr.DataArray):
         raise ValueError("Input must be an xarray DataArray.")
@@ -184,7 +184,7 @@ def aggregate_across_dimension(xarray_data, dim, operation='mean', args=None):
 
     # return the new xarray in ncdf4 format
     artifacts = {".nc": Artifact(item=aggregated_data, writer=lambda path: aggregated_data.to_netcdf(path))}
-    return FeatureResult(artifacts=artifacts)
+    return NodeResult(artifacts=artifacts)
 
 if __name__ == "__main__":
     import numpy as np

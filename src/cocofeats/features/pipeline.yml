@@ -2,11 +2,11 @@ FeatureDefinitions:
 
   CheckLineFrequency:
     overwrite : False
-    flow:
+    nodes:
       - id: 0
         feature: SourceFile
       - id: 1
-        function: mne_spectrum
+        node: mne_spectrum
         args:
           meeg: id.0
           compute_psd_kwargs:
@@ -17,11 +17,11 @@ FeatureDefinitions:
 
   BasicPrep1:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: SourceFile
       - id: 1
-        function: basic_preprocessing
+        node: basic_preprocessing
         args:
           mne_object: id.0
           resample: 250              # resample to 250 Hz
@@ -50,24 +50,24 @@ FeatureDefinitions:
 
   InterFeatureDependence:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: BasicPrep1.fif
       - id: 1
         feature: CheckLineFrequency.nc
       - id: 3
-        function: dummy
+        node: dummy
         args:
           param1: id.0
           param2: id.1
   
   SpectrumArrayWelch:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: BasicPrep1.fif
       - id: 1
-        function: mne_spectrum_array
+        node: mne_spectrum_array
         args:
           meeg: id.0
           method: 'welch'
@@ -83,11 +83,11 @@ FeatureDefinitions:
 
   SpectrumArrayMultitaper:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: BasicPrep1.fif
       - id: 1
-        function: mne_spectrum_array
+        node: mne_spectrum_array
         args:
           meeg: id.0
           method: 'multitaper'
@@ -102,10 +102,10 @@ FeatureDefinitions:
 
   MEEGMetadata:
     overwrite: False
-    flow:
+    nodes:
       - id: 0
         feature: SourceFile
       - id: 1
-        function: extract_meeg_metadata
+        node: extract_meeg_metadata
         args:
           mne_object: id.0

@@ -7,9 +7,13 @@ from typing import Any, Dict, List, Set
 
 import yaml
 
-from cocofeats.definitions import FeatureResult
-from cocofeats.features import get_feature
-from cocofeats.flows import get_flow, list_flows, register_flow_with_name
+from cocofeats.definitions import NodeResult
+from cocofeats.features import (
+    get_feature as get_feature_definition,
+    list_features as list_feature_definitions,
+    register_feature_with_name,
+)
+from cocofeats.nodes import get_node
 from cocofeats.loggers import get_logger
 from cocofeats.utils import snake_to_camel
 
@@ -57,8 +61,8 @@ def _collect_id_refs(obj: Any) -> Set[int]:
 
 
 def _unwrap_for_arg(val: Any, argname: str) -> Any:
-    """Heuristic: unwrap FeatureResult when passing to a primitive function."""
-    if isinstance(val, FeatureResult):
+    """Heuristic: unwrap NodeResult when passing to a primitive function."""
+    if isinstance(val, NodeResult):
         if argname in {"data", "dataset", "da", "ds"} and hasattr(val, "data"):
             return val.data
         if argname in {"mne_object", "meeg", "raw", "epochs"}:
@@ -77,8 +81,8 @@ def _prep_kwargs(raw_kwargs: dict[str, Any], store: dict[int, Any]) -> dict[str,
     return {k: _unwrap_for_arg(v, k) for k, v in resolved.items()}
 
 
-def _topo_order(flow: list[dict[str, Any]]) -> list[int]:
-    steps = {s["id"]: s for s in flow}
+def _topo_order(nodes: list[dict[str, Any]]) -> list[int]:
+    steps = {s["id"]: s for s in nodes}
     dependencies: dict[int, Set[int]] = {}
     for sid, step in steps.items():
         declared = step.get("depends_on") or []
@@ -104,7 +108,7 @@ def _topo_order(flow: list[dict[str, Any]]) -> list[int]:
 
 # Optional: simple cache probe (customize for your FS layout)
 def _is_step_cached(
-    flow_name: str, step_feature_name: str, reference_base: Path, accept_ambiguous=False
+    feature_name: str, step_feature_name: str, reference_base: Path, accept_ambiguous=False
 ) -> bool:
     """
     Decide if a 'feature' step can be considered already computed.
@@ -119,8 +123,8 @@ def _is_step_cached(
         if not accept_ambiguous:
             log.error(
                 "Multiple cached artifacts found",
-                flow=flow_name,
-                feature=step_feature_name,
+                feature=feature_name,
+                step_reference=step_feature_name,
                 reference_base=reference_base,
                 candidates=candidates,
             )
@@ -130,8 +134,8 @@ def _is_step_cached(
         else:
             log.warning(
                 "Multiple cached artifacts found, using the first one",
-                flow=flow_name,
-                feature=step_feature_name,
+                feature=feature_name,
+                step_reference=step_feature_name,
                 reference_base=reference_base,
                 candidates=candidates,
             )
@@ -139,23 +143,23 @@ def _is_step_cached(
 
 
 # --- registration from YAML ---
-def register_flows_from_yaml(yaml_path: str) -> list[str]:
+def register_features_from_yaml(yaml_path: str) -> list[str]:
     with open(yaml_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
-    flow_defs: dict[str, dict] = cfg.get("FeatureDefinitions", {}) or {}
+    feature_defs: dict[str, dict] = cfg.get("FeatureDefinitions", {}) or {}
     registered: list[str] = []
 
-    for flow_name, flow_def in flow_defs.items():
+    for feature_name, feature_def in feature_defs.items():
 
-        def make_wrapper(flow_name: str, flow_def: dict):
+        def make_wrapper(feature_name: str, feature_def: dict):
             def wrapper(
                 file_path: str,
                 reference_base: Path | None = None,
                 dataset_config: Any = None,
                 mount_point: Path | None = None,
-            ) -> FeatureResult:
-                return run_flow(
-                    flow_def,
+            ) -> NodeResult:
+                return run_feature(
+                    feature_def,
                     file_path,
                     reference_base or Path(""),
                     dataset_config=dataset_config,
@@ -164,13 +168,13 @@ def register_flows_from_yaml(yaml_path: str) -> list[str]:
 
             return wrapper
 
-        func = make_wrapper(flow_name, flow_def)
+        func = make_wrapper(feature_name, feature_def)
 
         # pass the definition into the registry
-        register_flow_with_name(flow_name, func, definition=flow_def)
+        register_feature_with_name(feature_name, func, definition=feature_def)
 
-        registered.append(flow_name)
-        log.info("Registered flow", name=flow_name)
+        registered.append(feature_name)
+        log.info("Registered feature", name=feature_name)
 
     return registered
 
@@ -188,47 +192,47 @@ def _split_feature_ref(feature_ref: str) -> tuple[str, str | None]:
 # ---------- executor ----------
 
 
-def run_flow(
-    flow_def: dict,
-    flow_name: str,
+def run_feature(
+    feature_def: dict,
+    feature_name: str,
     file_path: str,
     reference_base: Path,
     dataset_config: Any = None,
     mount_point: Path | None = None,
     dry_run: bool = False,
-) -> FeatureResult | Dict[str, Any]:
+) -> NodeResult | Dict[str, Any]:
     """
-    Evaluate (or dry-run) a flow on a single file.
+    Evaluate (or dry-run) a feature on a single file.
 
     When dry_run=True:
       - Do NOT execute any steps.
       - Report, per step, whether the expected artifacts are already present.
-      - Return a dict with a 'plan' list (so callers don't confuse it with FeatureResult).
+      - Return a dict with a 'plan' list (so callers don't confuse it with NodeResult).
 
     Normal mode:
       - 'feature' steps: if cached and overwrite=False, skip compute; else compute or recurse.
-      - 'function' steps: execute; if it's the last step, save artifacts under '@<FlowName>*'.
+      - 'node' steps: execute; if it's the last step, save artifacts under '@<FeatureName>*'.
     """
-    overwrite = bool(flow_def.get("overwrite", False))
-    flow = flow_def.get("flow", [])
-    order = _topo_order(flow)
+    overwrite = bool(feature_def.get("overwrite", False))
+    nodes = feature_def.get("nodes", [])
+    order = _topo_order(nodes)
 
     store: dict[int, Any] = {}
-    last_result: FeatureResult | None = None
+    last_result: NodeResult | None = None
     plan: List[Dict[str, Any]] = [] if dry_run else None
 
     def _record(**kwargs):
         if plan is not None:
             plan.append(kwargs)
 
-    # In dry-run, also check the final output of the flow upfront
-    final_prefix = reference_base.as_posix() + "@" + snake_to_camel(flow_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(flow_name)
+    # In dry-run, also check the final output of the feature upfront
+    final_prefix = reference_base.as_posix() + "@" + snake_to_camel(feature_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name)
     if dry_run:
         final_candidates = _artifact_candidates_for(final_prefix)
         _record(
             id="final",
-            kind="flow_output",
-            name=flow_name,
+            kind="feature_output",
+            name=feature_name,
             prefix=final_prefix,
             cached=len(final_candidates) > 0,
             paths=final_candidates,
@@ -239,8 +243,8 @@ def run_flow(
             final_candidates = _artifact_candidates_for(final_prefix)
             if len(final_candidates) > 0:
                 log.info(
-                    "Last step of the flow is cached",
-                    flow=flow_name,
+                    "Last step of the feature is cached",
+                    feature=feature_name,
                     final_prefix=final_prefix,
                     reference_base=reference_base,
                     candidate=final_candidates[0],
@@ -248,7 +252,7 @@ def run_flow(
                 return {"cached": final_candidates}
 
     for sid in order:
-        step = next(s for s in flow if s["id"] == sid)
+        step = next(s for s in nodes if s["id"] == sid)
 
         # 1) 'feature' step
         if "feature" in step:
@@ -274,9 +278,9 @@ def run_flow(
                     "cached": len(candidates) > 0,
                     "paths": candidates,
                 }
-                if base_name in list_flows():
-                    sub_def = get_flow(base_name).definition
-                    entry["subflow_plan"] = run_flow(
+                if base_name in list_feature_definitions():
+                    sub_def = get_feature_definition(base_name).definition
+                    entry["subfeature_plan"] = run_feature(
                         sub_def,
                         base_name,
                         file_path,
@@ -293,17 +297,17 @@ def run_flow(
             if cached_here:
                 log.debug(
                     "Using cached feature",
-                    flow=flow_name,
+                    feature=feature_name,
                     id=sid,
-                    feature=feature_ref,
+                    child_feature=feature_ref,
                     paths=candidates,
                 )
                 store[sid] = candidates[0]  # marker
                 if len(candidates) > 1:
                     log.warning(
                         "Multiple cached artifacts found, using the first one",
-                        flow=flow_name,
-                        feature=feature_ref,
+                        feature=feature_name,
+                        child_feature=feature_ref,
                         reference_base=reference_base,
                         candidates=candidates,
                         selected=candidates[0],
@@ -311,10 +315,10 @@ def run_flow(
                 last_result = {"cached": candidates}
                 continue
 
-            if base_name in list_flows():
-                log.debug("Recurse into sub-flow", parent=flow_name, child=base_name)
-                sub_result = run_flow(
-                    get_flow(base_name).definition,
+            if base_name in list_feature_definitions():
+                log.debug("Recurse into sub-feature", parent_feature=feature_name, child_feature=base_name)
+                sub_result = run_feature(
+                    get_feature_definition(base_name).definition,
                     base_name,
                     file_path,
                     reference_base=reference_base,
@@ -322,30 +326,30 @@ def run_flow(
                     mount_point=mount_point,
                     dry_run=False,
                 )
-                # sub-flow may return None if already cached
+                # sub-feature may return None if already cached
                 store[sid] = sub_result
-                last_result = sub_result if isinstance(sub_result, FeatureResult) else last_result
+                last_result = sub_result if isinstance(sub_result, NodeResult) else last_result
             else:
-                log.error("Unknown feature in flow", flow=flow_name, id=sid, feature=feature_ref)
-                raise ValueError(f"Unknown feature '{feature_ref}' in flow '{flow_name}'")
+                log.error("Unknown feature reference", feature=feature_name, id=sid, child_feature=feature_ref)
+                raise ValueError(f"Unknown feature '{feature_ref}' in feature '{feature_name}'")
 
-        # 2) 'function' step
-        elif "function" in step:
-            func_name = step["function"]
+        # 2) 'node' step
+        elif "node" in step:
+            node_name = step["node"]
 
             if dry_run:
                 if not sid == order[-1]:
                     _record(
                         id=sid,
-                        kind="function",
-                        name=func_name,
+                        kind="node",
+                        name=node_name,
                         will_compute=True,
                         is_final=(sid == order[-1]),
                     )
                 continue
                 # not sure what to do if not
 
-            fn = get_feature(func_name)
+            fn = get_node(node_name)
 
             extra_args = {}
             if "reference_base" in inspect.signature(fn).parameters:
@@ -356,16 +360,16 @@ def run_flow(
                 extra_args["mount_point"] = mount_point
 
             kwargs = _prep_kwargs(step.get("args", {}), store)
-            log.debug("Execute function", flow=flow_name, id=sid, function=func_name, kwargs=kwargs)
+            log.debug("Execute node", feature=feature_name, id=sid, node=node_name, kwargs=kwargs)
             res = fn(**kwargs, **extra_args)
-            if not isinstance(res, FeatureResult):
-                raise TypeError(f"Function {func_name} must return FeatureResult")
+            if not isinstance(res, NodeResult):
+                raise TypeError(f"Node {node_name} must return NodeResult")
             store[sid] = res
             last_result = res
 
             if sid == order[-1]:
-                # save final artifacts under '@<FlowName>'
-                reference_path = reference_base.as_posix() + "@" + snake_to_camel(flow_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(flow_name)
+                # save final artifacts under '@<FeatureName>'
+                reference_path = reference_base.as_posix() + "@" + snake_to_camel(feature_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name)
                 for artifact_name, artifact in res.artifacts.items():
                     try:
                         log.info("Processed artifact", name=artifact_name, file=artifact)
@@ -383,11 +387,11 @@ def run_flow(
                         raise
 
         else:
-            raise ValueError(f"Step id={sid} must specify 'feature' or 'function'")
+            raise ValueError(f"Step id={sid} must specify 'feature' or 'node'")
 
     if dry_run:
         return {
-            "flow": flow_name,
+            "feature": feature_name,
             "file": file_path,
             "reference_base": reference_base.as_posix() if isinstance(reference_base, Path) else reference_base,
             "overwrite": overwrite,
@@ -395,5 +399,5 @@ def run_flow(
         }
 
     if last_result is None:
-        raise RuntimeError(f"Flow '{flow_name}' produced no result")
+        raise RuntimeError(f"Feature '{feature_name}' produced no result")
     return last_result
