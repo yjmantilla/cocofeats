@@ -484,7 +484,7 @@ def apply_1d(
     metadata: Mapping[str, Any] | None = None,
     keep_input_metadata: bool = True,
     mode: str = "vectorized",
-) -> NodeResult:
+) -> xr.DataArray:
     """Apply a 1-D pure function across a chosen xarray dimension.
 
     Parameters
@@ -569,13 +569,7 @@ def apply_1d(
 
     result_da.attrs["metadata"] = json.dumps(combined_metadata, indent=2, default=_json_safe)
 
-    artifacts = {
-        ".nc": Artifact(
-            item=result_da,
-            writer=lambda path: result_da.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
-        )
-    }
-    return NodeResult(artifacts=artifacts)
+    return result_da
 
 
 @register_node(name="xarray_factory", override=True)
@@ -600,7 +594,7 @@ def xarray_factory(
     forwarded verbatim to :func:`apply_1d`.
     """
 
-    return apply_1d(
+    result_da = apply_1d(
         data_like,
         dim=dim,
         pure_function=pure_function,
@@ -613,6 +607,12 @@ def xarray_factory(
         keep_input_metadata=keep_input_metadata,
         mode=mode,
     )
-
+    artifacts = {
+        ".nc": Artifact(
+            item=result_da,
+            writer=lambda path: result_da.to_netcdf(path, engine="netcdf4", format="NETCDF4"),
+        )
+    }
+    return NodeResult(artifacts=artifacts)
 
 __all__ = ["apply_1d", "xarray_factory"]
