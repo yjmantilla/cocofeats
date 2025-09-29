@@ -39,6 +39,7 @@ from cocofeats.loggers import get_logger
 from cocofeats.nodes import register_node
 from cocofeats.utils import _resolve_eval_strings
 from cocofeats.writers import _json_safe
+from cocofeats.loaders import load_meeg
 
 log = get_logger(__name__)
 
@@ -106,7 +107,7 @@ def _ensure_dataarray(data_like: DataLike, *, context: str) -> xr.DataArray:
     data_like
         Supported inputs include ``NodeResult`` instances containing ``.nc``
         artifacts, ``xarray`` datasets/arrays, NumPy arrays, ``mne`` Raw/Epochs
-        objects, or filesystem paths pointing to NetCDF files.
+        objects, or filesystem paths pointing to NetCDF files or FIF files.
     context
         Short description used in error messages.
     """
@@ -135,9 +136,17 @@ def _ensure_dataarray(data_like: DataLike, *, context: str) -> xr.DataArray:
         return xr.DataArray(data_like, dims=dims)
 
     if isinstance(data_like, (str, os.PathLike)):
-        path = os.fspath(data_like)
-        log.debug("Loading DataArray from path", path=path)
-        return xr.load_dataarray(path)
+        if '.nc' in str(data_like).lower():
+            path = os.fspath(data_like)
+            log.debug("Loading DataArray from path", path=path)
+            return xr.load_dataarray(path)
+        elif '.fif' in str(data_like).lower() and mne is not None:
+            log.debug("Loading MNE Raw from path", path=os.fspath(data_like))
+            data_like = load_meeg(data_like)
+        else:
+            raise _FactoryError(
+                f"{context}: string/PathLike inputs must point to '.nc' or '.fif' files."
+            )
 
     if mne is not None and isinstance(data_like, mne.io.BaseRaw):
         data = data_like.get_data()
@@ -290,8 +299,15 @@ def _vectorised_apply(
     }
     if output_sizes:
         apply_kwargs["output_sizes"] = output_sizes
-
+    time_start = time.perf_counter()
     result_da = xr.apply_ufunc(_wrapped, data_xr, **apply_kwargs)
+    time_end = time.perf_counter()
+    log.debug(
+        "Vectorized apply_ufunc completed",
+        duration_seconds=time_end - time_start,
+        input_shape=tuple(data_xr.shape),
+        output_shape=tuple(result_da.shape),
+    )
 
     input_dims = list(data_xr.dims)
     if result_dim_name is None:
@@ -321,6 +337,8 @@ def _vectorised_apply(
         "output_shape": [int(result_da.sizes[d]) for d in result_da.dims],
         "function": getattr(func, "__name__", repr(func)),
         "function_module": getattr(func, "__module__", None),
+        "apply_ufunc_kwargs": {str(k): _json_safe(v) for k, v in apply_kwargs.items()},
+        "apply_ufunc_duration_seconds": time_end - time_start,
     }
 
     return result_da, metadata
