@@ -79,7 +79,6 @@ FeatureDefinitions:
             window: 'hamming'
             remove_dc: True
             output: 'power'
-          extra_artifacts: True
 
   SpectrumArrayMultitaper:
     overwrite: False
@@ -98,7 +97,6 @@ FeatureDefinitions:
             normalization: 'length'
             remove_dc: True
             output: 'power'
-          extra_artifacts: True
 
   MEEGMetadata:
     overwrite: False

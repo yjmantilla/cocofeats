@@ -69,11 +69,11 @@ def test_band_ratios_default_permutations() -> None:
     ratio_da = ratio_feature.artifacts[".nc"].item
 
     assert isinstance(ratio_da, xr.DataArray)
-    assert ratio_da.dims == ("epochs", "spaces", "freqband_pairs")
-    assert len(ratio_da.coords["freqband_pairs"].values) == 6
-    assert "low/high" in ratio_da.coords["freqband_pairs"].values
-    assert_allclose(ratio_da.sel(freqband_pairs="low/high").values, 1.0)
-    assert_allclose(ratio_da.sel(freqband_pairs="mid/low").values, 1.0)
+    assert ratio_da.dims == ("epochs", "spaces", "freqbandPairs")
+    assert len(ratio_da.coords["freqbandPairs"].values) == 6
+    assert "low/high" in ratio_da.coords["freqbandPairs"].values
+    assert_allclose(ratio_da.sel(freqbandPairs="low/high").values, 1.0)
+    assert_allclose(ratio_da.sel(freqbandPairs="mid/low").values, 1.0)
 
 
 def test_band_ratios_handles_small_denominator() -> None:
@@ -94,5 +94,5 @@ def test_band_ratios_handles_small_denominator() -> None:
     ratio_feature = band_ratios(feature_input, eps=1e-6)
     ratio_da = ratio_feature.artifacts[".nc"].item
 
-    assert np.isnan(ratio_da.sel(freqband_pairs="top/zero").values).all()
-    assert_allclose(ratio_da.sel(freqband_pairs="zero/top").values, 0.0)
+    assert np.isnan(ratio_da.sel(freqbandPairs="top/zero").values).all()
+    assert_allclose(ratio_da.sel(freqbandPairs="zero/top").values, 0.0)

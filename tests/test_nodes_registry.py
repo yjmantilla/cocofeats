@@ -2,15 +2,15 @@ import pytest
 
 import cocofeats.nodes as nodes
 from cocofeats.nodes.preprocessing import basic_preprocessing
-from cocofeats.nodes.spectral import spectrum
+from cocofeats.nodes.spectral import mne_spectrum
 
 
 def test_known_nodes_registered():
     registered = nodes.list_nodes()
     assert "basic_preprocessing" in registered
-    assert "spectrum" in registered
+    assert "mne_spectrum" in registered
     assert nodes.get_node("basic_preprocessing") is basic_preprocessing
-    assert nodes.get_node("spectrum") is spectrum
+    assert nodes.get_node("mne_spectrum") is mne_spectrum
 
 
 def test_register_node_duplicate_guard():
