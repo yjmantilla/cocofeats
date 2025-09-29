@@ -32,10 +32,10 @@ def _make_dataarray() -> xr.DataArray:
 def test_apply_1d_scalar_output() -> None:
     arr = _make_dataarray()
     result = apply_1d(arr, dim="time", pure_function=np.mean)
-    out = result.artifacts[".nc"].item
 
-    assert out.dims == ("channels",)
-    assert_allclose(out.values, arr.mean(dim="time").values)
+    assert isinstance(result, xr.DataArray)
+    assert result.dims == ("channels",)
+    assert_allclose(result.values, arr.mean(dim="time").values)
 
 
 def test_apply_1d_sequence_output_with_coords() -> None:
@@ -52,11 +52,10 @@ def test_apply_1d_sequence_output_with_coords() -> None:
         result_coords=("mean", "std"),
     )
 
-    out = result.artifacts[".nc"].item
-
-    assert out.dims == ("channels", "stat")
-    assert list(out.coords["stat"].values) == ["mean", "std"]
-    assert_allclose(out.sel(stat="mean").values, arr.mean(dim="time").values)
+    assert isinstance(result, xr.DataArray)
+    assert result.dims == ("channels", "stat")
+    assert list(result.coords["stat"].values) == ["mean", "std"]
+    assert_allclose(result.sel(stat="mean").values, arr.mean(dim="time").values)
 
 
 def test_iterative_mode_matches_vectorized_and_reports_timings() -> None:
@@ -82,18 +81,17 @@ def test_iterative_mode_matches_vectorized_and_reports_timings() -> None:
         mode="iterative",
     )
 
-    iterative_da = iterative_result.artifacts[".nc"].item
-    vector_da = vector_result.artifacts[".nc"].item
+    assert isinstance(vector_result, xr.DataArray)
+    assert isinstance(iterative_result, xr.DataArray)
+    assert_allclose(iterative_result.values, vector_result.values)
 
-    assert_allclose(iterative_da.values, vector_da.values)
-
-    metadata = json.loads(iterative_da.attrs["metadata"])
+    metadata = json.loads(iterative_result.attrs["metadata"])
     assert metadata["mode"] == "iterative"
     assert metadata["per_slice_duration_unit"] == "seconds"
 
     timing_da = xr.DataArray.from_dict(metadata["per_slice_duration"])
-    assert timing_da.dims == iterative_da.dims
-    assert timing_da.shape == iterative_da.shape
+    assert timing_da.dims == iterative_result.dims
+    assert timing_da.shape == iterative_result.shape
     assert np.all(timing_da.values >= 0.0)
 
 
@@ -102,10 +100,10 @@ def test_apply_1d_accepts_noderesult_input() -> None:
     node_input = NodeResult({".nc": Artifact(item=arr, writer=lambda path: arr.to_netcdf(path))})
 
     result = apply_1d(node_input, dim="time", pure_function=np.mean)
-    out = result.artifacts[".nc"].item
 
-    assert out.shape == (3,)
-    assert_allclose(out.values, arr.mean(dim="time").values)
+    assert isinstance(result, xr.DataArray)
+    assert result.shape == (3,)
+    assert_allclose(result.values, arr.mean(dim="time").values)
 
 
 @pytest.mark.skipif(mne is None, reason="mne not available")
@@ -121,11 +119,11 @@ def test_apply_1d_handles_mne_raw() -> None:
     raw = mne.io.RawArray(data, info, verbose="error")
 
     result = apply_1d(raw, dim="time", pure_function=np.mean)
-    out = result.artifacts[".nc"].item
 
-    assert out.dims == ("channels",)
+    assert isinstance(result, xr.DataArray)
+    assert result.dims == ("channels",)
     expected = raw.get_data().mean(axis=1)
-    assert_allclose(out.values, expected)
+    assert_allclose(result.values, expected)
 
 
 def test_xarray_factory_registered_node_supports_dotted_path() -> None:
