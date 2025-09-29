@@ -60,7 +60,7 @@ def _build_node(
         data_like,
         *,
         dim: str,
-        mode: str = "vectorized",
+        mode: str = "iterative",
         keep_input_metadata: bool = True,
         metadata: Mapping[str, Any] | None = None,
         result_dim: str | None = None,

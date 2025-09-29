@@ -280,6 +280,144 @@ FeatureDefinitions:
           component: 'all'
           freq_dim: 'frequencies'
 
+  AntropyAppEntropy5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: app_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyHjorthParams5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: hjorth_params
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyLZivComplexity5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id1:
+        node: binarize_with_median
+        args:
+          data_like: id.0
+          dim: 'times'
+      - id: 2
+        node: lziv_complexity
+        args:
+          data_like: id.1
+          dim: 'times'
+
+  AntropyNumZeroCross5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: num_zerocross
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyPermutationEntropy5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: perm_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropySampleEntropy5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: sample_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropySpectralEntropy5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: spectral_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+          sf: 200.0
+
+  AntropySVDEntropy5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: svd_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyHiguchiFD5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: higuchi_fd
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyKatzFD5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: katz_fd
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyPetrosianFD5seg:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: petrosian_fd
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyDetrendedFluctuation10min:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep10min.fif
+      - id: 1
+        node: detrended_fluctuation
+        args:
+          data_like: id.0
+          dim: 'times'
+
 FeatureList:
   - BasicPrep5seg
   - BasicPrep10min
@@ -296,3 +434,15 @@ FeatureList:
   - FooofResidualSpectrumArrayWelchEpochsAverage5seg
   - FooofAllSpectrumArrayWelchEpochsAverage5seg
   - FooofScalarsAllSpectrumArrayWelchEpochsAverage5seg
+#  - AntropyAppEntropy5seg
+  - AntropyHjorthParams5seg
+  - AntropyLZivComplexity5seg
+  - AntropyNumZeroCross5seg
+  - AntropyPermutationEntropy5seg
+#  - AntropySampleEntropy5seg
+  - AntropySpectralEntropy5seg
+  - AntropySVDEntropy5seg
+  - AntropyHiguchiFD5seg
+  - AntropyKatzFD5seg
+  - AntropyPetrosianFD5seg
+  - AntropyDetrendedFluctuation10min
