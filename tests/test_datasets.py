@@ -803,3 +803,7 @@ def test_get_dummy_epochs_shapes():
     assert epochs.info["nchan"] == 3
     # Check time window
     assert epochs.tmax - epochs.tmin > 0
+
+if __name__ == "__main__":
+#    pytest.main([__file__])
+    pytest.main(["-v", "-s", "-q", "--no-cov", "--pdb", __file__])
