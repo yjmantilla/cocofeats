@@ -690,7 +690,7 @@ def save_dummy_vhdr(fpath: PathLike, dummy_args: dict[str, Any] | None = None) -
     return None
 
 
-def generate_dummy_dataset(data_params: dict[str, Any] | None = None) -> None:
+def generate_dummy_dataset(data_params: dict[str, Any] | None = None, generation_args: dict[str, Any] | None = None) -> None:
     """
     Generate a dummy dataset on disk.
 
@@ -720,6 +720,12 @@ def generate_dummy_dataset(data_params: dict[str, Any] | None = None) -> None:
             Example file(s) to replicate. If omitted, a BrainVision trio is created
             automatically and used as the example.
 
+    generation_args : dict, optional
+        Keyword arguments forwarded to :func:`cocofeats.datasets.get_dummy_raw`
+        when creating the example BrainVision trio if ``EXAMPLE`` is not provided.
+        Possible keys include ``NCHANNELS``, ``SFREQ``, ``STOP``, ``NUMEVENTS``,
+        ``random_state``, etc. If ``None``, sensible defaults from :func:`get_dummy_raw`
+        are used.
     Returns
     -------
     None
@@ -763,8 +769,10 @@ def generate_dummy_dataset(data_params: dict[str, Any] | None = None) -> None:
     with tempfile.TemporaryDirectory() as td:
         if example is None:
             tmp_vhdr = Path(td) / f"{dataset_name}_template.vhdr"
+            if generation_args is None:
+                generation_args = {"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 10.0, "NUMEVENTS": 5}
             trio = save_dummy_vhdr(
-                tmp_vhdr, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 10.0, "NUMEVENTS": 5}
+                tmp_vhdr, dummy_args=generation_args
             )
             if not trio:
                 raise RuntimeError("Failed to create example BrainVision files for dummy dataset.")
