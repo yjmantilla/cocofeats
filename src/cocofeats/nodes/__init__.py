@@ -6,7 +6,11 @@ from collections.abc import Callable, Iterable
 from importlib import import_module
 from typing import Any
 
+from cocofeats.loggers import get_logger
+
 NodeCallable = Callable[..., Any]
+
+log = get_logger(__name__)
 
 _NODE_REGISTRY: dict[str, NodeCallable] = {}
 
@@ -74,7 +78,22 @@ def discover(package: str | None = None) -> None:
     for mod_info in pkgutil.iter_modules(module.__path__):
         if mod_info.name.startswith("_"):
             continue
-        import_module(f"{package_name}.{mod_info.name}")
+        module_name = f"{package_name}.{mod_info.name}"
+        try:
+            import_module(module_name)
+        except ModuleNotFoundError as exc:  # pragma: no cover - optional dependency failure
+            missing_name = getattr(exc, "name", None)
+            log.warning(
+                "Skipping node module due to missing dependency",
+                module=module_name,
+                missing=missing_name,
+            )
+        except ImportError as exc:  # pragma: no cover - misconfigured module
+            log.warning(
+                "Skipping node module because it failed to import",
+                module=module_name,
+                error=str(exc),
+            )
 
 
 def register_node_with_name(name: str, func: Callable) -> None:
