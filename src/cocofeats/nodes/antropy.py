@@ -52,6 +52,7 @@ def _build_node(
     name: str,
     default_result_dim: str | None = None,
     default_result_coords: Sequence[str] | None = None,
+    default_mode: str = "iterative",
 ) -> None:
     """Register a node that applies ``func`` along a chosen dimension."""
 
@@ -60,7 +61,7 @@ def _build_node(
         data_like,
         *,
         dim: str,
-        mode: str = "iterative",
+        mode: str = default_mode,
         keep_input_metadata: bool = True,
         metadata: Mapping[str, Any] | None = None,
         result_dim: str | None = None,
@@ -110,7 +111,6 @@ _build_node(detrended_fluctuation, name="detrended_fluctuation")
 _build_node(higuchi_fd, name="higuchi_fd")
 _build_node(katz_fd, name="katz_fd")
 _build_node(petrosian_fd, name="petrosian_fd")
-
 
 __all__ = [
     "app_entropy",
