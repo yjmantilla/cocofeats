@@ -166,6 +166,125 @@ def test_apply_1d_raises_on_bad_result_coords_length() -> None:
             result_coords=("mean",),
         )
 
+
+def test_apply_1d_supports_per_slice_arguments() -> None:
+    data = np.arange(2 * 3 * 5, dtype=float).reshape(2, 3, 5)
+    arr = xr.DataArray(
+        data,
+        dims=("epochs", "spaces", "times"),
+        coords={
+            "epochs": [0, 1],
+            "spaces": ["C3", "Cz", "C4"],
+            "times": np.linspace(0.0, 1.0, 5),
+        },
+    )
+
+    offsets = xr.DataArray(
+        np.linspace(0.1, 0.6, 6).reshape(2, 3),
+        dims=("epochs", "spaces"),
+        coords={
+            "epochs": arr.coords["epochs"],
+            "spaces": arr.coords["spaces"],
+        },
+    )
+
+    scales = xr.DataArray(
+        np.linspace(1.0, 1.5, 3),
+        dims=("spaces",),
+        coords={"spaces": arr.coords["spaces"]},
+    )
+
+    def compute(vector: np.ndarray, offset: float, scale: float) -> float:
+        return float(vector.mean() + offset * scale)
+
+    result = apply_1d(
+        arr,
+        dim="times",
+        pure_function=compute,
+        args=(offsets,),
+        kwargs={"scale": scales},
+        mode="iterative",
+    )
+
+    assert result.dims == ("epochs", "spaces")
+
+    expected = np.empty((2, 3), dtype=float)
+    for epoch_index, epoch in enumerate(arr.coords["epochs"].values):
+        for space_index, space in enumerate(arr.coords["spaces"].values):
+            mean_val = data[epoch_index, space_index].mean()
+            offset_val = offsets.sel(epochs=epoch, spaces=space).item()
+            scale_val = scales.sel(spaces=space).item()
+            expected[epoch_index, space_index] = mean_val + offset_val * scale_val
+
+    assert_allclose(result.values, expected)
+
+    metadata = json.loads(result.attrs["metadata"])
+    per_slice = metadata.get("per_slice_arguments", {})
+    assert per_slice
+    assert per_slice["args"][0]["name"] == "arg_0"
+    assert per_slice["kwargs"]["scale"]["name"] == "scale"
+
+
+def test_apply_1d_per_slice_arguments_require_iterative_mode() -> None:
+    data = np.arange(2 * 3 * 4, dtype=float).reshape(2, 3, 4)
+    arr = xr.DataArray(
+        data,
+        dims=("epochs", "spaces", "times"),
+        coords={
+            "epochs": [0, 1],
+            "spaces": ["C3", "Cz", "C4"],
+            "times": np.linspace(0.0, 1.0, 4),
+        },
+    )
+
+    offsets = xr.DataArray(
+        np.zeros((2, 3)),
+        dims=("epochs", "spaces"),
+        coords={
+            "epochs": arr.coords["epochs"],
+            "spaces": arr.coords["spaces"],
+        },
+    )
+
+    def add_offset(vector: np.ndarray, offset: float) -> float:
+        return float(vector.mean() + offset)
+
+    with pytest.raises(ValueError, match="Per-slice arguments require mode='iterative'"):
+        apply_1d(
+            arr,
+            dim="times",
+            pure_function=add_offset,
+            args=(offsets,),
+            mode="vectorized",
+        )
+
+
+def test_apply_1d_per_slice_argument_rejects_iteration_dimension() -> None:
+    data = np.arange(2 * 3 * 4, dtype=float).reshape(2, 3, 4)
+    arr = xr.DataArray(
+        data,
+        dims=("epochs", "spaces", "times"),
+        coords={
+            "epochs": [0, 1],
+            "spaces": ["C3", "Cz", "C4"],
+            "times": np.linspace(0.0, 1.0, 4),
+        },
+    )
+
+    bad = xr.DataArray(np.arange(arr.sizes["times"]), dims=("times",))
+
+    def add_offset(vector: np.ndarray, offset: float) -> float:
+        return float(vector.mean() + offset)
+
+    with pytest.raises(ValueError, match="times"):
+        apply_1d(
+            arr,
+            dim="times",
+            pure_function=add_offset,
+            args=(bad,),
+            mode="iterative",
+        )
+
 if __name__ == "__main__":
 #    pytest.main([__file__])
     pytest.main(["-v", "-s", "-q", "--no-cov", "--pdb", __file__])
