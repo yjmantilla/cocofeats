@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Sequence
 import time
@@ -66,6 +67,65 @@ DataLike = (
 
 class _FactoryError(ValueError):
     """Internal helper error for consistent exception types."""
+
+
+@dataclass(slots=True)
+class _SliceParameterCache:
+    """Cached view of a per-slice argument or keyword value."""
+
+    name: str | None
+    dims: tuple[str, ...]
+    shape: tuple[int, ...]
+    provided_dims: tuple[str, ...]
+    flat_values: np.ndarray
+    source: str
+
+    def value_at(self, index: int) -> Any:
+        value = self.flat_values[index]
+        if isinstance(value, np.generic):
+            return value.item()
+        return value
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "dims": list(self.dims),
+            "shape": [int(v) for v in self.shape],
+            "provided_dims": list(self.provided_dims),
+            "source": self.source,
+        }
+
+
+@dataclass(slots=True)
+class _ArgumentSpec:
+    """Descriptor for positional/keyword arguments resolved per slice."""
+
+    name: str | None
+    provider: _SliceParameterCache | None
+    constant_value: Any
+
+    def value_at(self, index: int) -> Any:
+        if self.provider is None:
+            return self.constant_value
+        return self.provider.value_at(index)
+
+
+def _is_potential_data_like(value: Any) -> bool:
+    if xr is not None and isinstance(value, (xr.DataArray, xr.Dataset)):
+        return True
+    if isinstance(value, (NodeResult, np.ndarray)):
+        return True
+    if isinstance(value, (str, os.PathLike)):
+        text = os.fspath(value).lower()
+        return ".nc" in text or ".fif" in text
+    if mne is not None:
+        base_raw = getattr(mne.io, "BaseRaw", None)
+        base_epochs = getattr(mne, "BaseEpochs", None)
+        if base_raw is not None and isinstance(value, base_raw):
+            return True
+        if base_epochs is not None and isinstance(value, base_epochs):
+            return True
+    return False
 
 
 def _resolve_callable(candidate: CallableLike | str) -> CallableLike:
@@ -191,6 +251,153 @@ def _ensure_dataarray(data_like: DataLike, *, context: str) -> xr.DataArray:
         return arr
 
     raise _FactoryError(f"{context}: unsupported input type '{type(data_like).__name__}'.")
+
+
+def _align_candidate_dims(
+    candidate: xr.DataArray,
+    *,
+    other_dims: Sequence[str],
+    context: str,
+) -> xr.DataArray:
+    """Rename anonymous dimensions to match ``other_dims`` when possible."""
+
+    allowed = set(other_dims)
+    if set(candidate.dims).issubset(allowed):
+        return candidate
+
+    if len(candidate.dims) == len(other_dims):
+        rename_map = {old: new for old, new in zip(candidate.dims, other_dims)}
+        renamed = candidate.rename(rename_map)
+        if set(renamed.dims).issubset(allowed):
+            return renamed
+
+    raise _FactoryError(
+        f"{context}: argument dimensions {tuple(candidate.dims)} must be a subset of {tuple(other_dims)}."
+    )
+
+
+def _build_slice_parameter(
+    value: Any,
+    *,
+    name: str | None,
+    data_xr: xr.DataArray,
+    dim: str,
+    other_dims: Sequence[str],
+    context: str,
+) -> _SliceParameterCache | None:
+    """Return a cached broadcast of per-slice argument values."""
+
+    if not _is_potential_data_like(value):
+        return None
+
+    if not other_dims:
+        # Single slice scenario: treat values as constants.
+        return None
+
+    candidate = _ensure_dataarray(value, context=context)
+
+    if candidate.ndim == 0:
+        return None
+
+    if dim in candidate.dims:
+        raise _FactoryError(
+            f"{context}: per-slice parameters must not depend on the iteration dimension '{dim}'."
+        )
+
+    candidate = _align_candidate_dims(candidate, other_dims=other_dims, context=context)
+
+    template = data_xr.transpose(*other_dims, dim).isel({dim: 0})
+    try:
+        broadcast = candidate.broadcast_like(template)
+    except ValueError as exc:  # pragma: no cover - xarray raises informative errors
+        raise _FactoryError(
+            f"{context}: unable to broadcast argument to dimensions {tuple(other_dims)} (reason: {exc})."
+        ) from exc
+
+    broadcast = broadcast.transpose(*other_dims)
+    shape = tuple(int(broadcast.sizes[d]) for d in other_dims)
+
+    if np.prod(shape, dtype=int) == 0:
+        raise _FactoryError(f"{context}: broadcast produced empty parameter values.")
+
+    flat_values = np.asarray(broadcast.values).reshape(-1)
+
+    expected = int(np.prod(shape, dtype=int))
+    if flat_values.size != expected:
+        raise _FactoryError(
+            f"{context}: internal error aligning parameter values; expected {expected} elements, got {flat_values.size}."
+        )
+
+    provider = _SliceParameterCache(
+        name=name,
+        dims=tuple(other_dims),
+        shape=shape,
+        provided_dims=tuple(candidate.dims),
+        flat_values=flat_values,
+        source=type(value).__name__,
+    )
+    return provider
+
+
+def _prepare_argument_specs(
+    args: Sequence[Any],
+    kwargs: Mapping[str, Any],
+    *,
+    data_xr: xr.DataArray,
+    dim: str,
+    other_dims: Sequence[str],
+) -> tuple[list[_ArgumentSpec], dict[str, _ArgumentSpec], dict[str, Any], bool]:
+    """Classify positional and keyword arguments into per-slice providers."""
+
+    arg_specs: list[_ArgumentSpec] = []
+    arg_details: list[dict[str, Any]] = []
+    kwarg_specs: dict[str, _ArgumentSpec] = {}
+    kwarg_details: dict[str, Any] = {}
+    has_per_slice = False
+
+    for idx, value in enumerate(args):
+        context = f"apply_1d args[{idx}]"
+        provider = _build_slice_parameter(
+            value,
+            name=f"arg_{idx}",
+            data_xr=data_xr,
+            dim=dim,
+            other_dims=other_dims,
+            context=context,
+        )
+        if provider is None:
+            arg_specs.append(_ArgumentSpec(name=None, provider=None, constant_value=value))
+        else:
+            has_per_slice = True
+            arg_specs.append(_ArgumentSpec(name=provider.name, provider=provider, constant_value=None))
+            detail = provider.describe()
+            detail["position"] = idx
+            arg_details.append(detail)
+
+    for key, value in kwargs.items():
+        context = f"apply_1d kwargs['{key}']"
+        provider = _build_slice_parameter(
+            value,
+            name=key,
+            data_xr=data_xr,
+            dim=dim,
+            other_dims=other_dims,
+            context=context,
+        )
+        if provider is None:
+            kwarg_specs[key] = _ArgumentSpec(name=key, provider=None, constant_value=value)
+        else:
+            has_per_slice = True
+            kwarg_specs[key] = _ArgumentSpec(name=key, provider=provider, constant_value=None)
+            kwarg_details[key] = provider.describe()
+
+    metadata: dict[str, Any] = {}
+    if arg_details:
+        metadata["args"] = arg_details
+    if kwarg_details:
+        metadata["kwargs"] = kwarg_details
+
+    return arg_specs, kwarg_specs, metadata, has_per_slice
 
 
 def _normalise_result(value: Any, *, dtype: np.dtype | None) -> tuple[np.ndarray, bool]:
@@ -349,8 +556,8 @@ def _iterative_apply(
     *,
     dim: str,
     func: CallableLike,
-    args: Sequence[Any],
-    kwargs: Mapping[str, Any],
+    arg_specs: Sequence[_ArgumentSpec],
+    kwarg_specs: Mapping[str, _ArgumentSpec],
     result_dim: str | None,
     result_coords: Sequence[Any] | None,
     output_dtype: np.dtype | None,
@@ -382,7 +589,10 @@ def _iterative_apply(
     if flat.size == 0:
         raise _FactoryError("Cannot apply factory to empty arrays.")
 
-    first_output = func(flat[0], *args, **kwargs)
+    first_args = tuple(spec.value_at(0) for spec in arg_specs)
+    first_kwargs = {key: spec.value_at(0) for key, spec in kwarg_specs.items()}
+
+    first_output = func(flat[0], *first_args, **first_kwargs)
     inferred_dtype = np.dtype(output_dtype) if output_dtype is not None else None
     first_array, is_scalar = _normalise_result(first_output, dtype=inferred_dtype)
 
@@ -425,9 +635,11 @@ def _iterative_apply(
         index_iter = iter([()])
 
     first_checked = False
-    for base_index, vector in zip(index_iter, flat):
+    for flat_idx, (base_index, vector) in enumerate(zip(index_iter, flat)):
+        call_args = tuple(spec.value_at(flat_idx) for spec in arg_specs)
+        call_kwargs = {key: spec.value_at(flat_idx) for key, spec in kwarg_specs.items()}
         start = time.perf_counter()
-        output = func(vector, *args, **kwargs)
+        output = func(vector, *call_args, **call_kwargs)
         duration = time.perf_counter() - start
         result_array, scalar_flag = _normalise_result(output, dtype=inferred_dtype)
 
@@ -541,10 +753,24 @@ def apply_1d(
     kwargs = dict(kwargs or {})
 
     data_xr = _ensure_dataarray(data_like, context="apply_1d")
+    other_dims = [d for d in data_xr.dims if d != dim]
+    #data_xr_orig_coords = data_xr.coords.copy(deep=True)
+    #data_xr_orig_dims = data_xr.dims.copy()
+
+    arg_specs, kwarg_specs, per_slice_details, has_per_slice = _prepare_argument_specs(
+        args,
+        kwargs,
+        data_xr=data_xr,
+        dim=dim,
+        other_dims=other_dims,
+    )
 
     normalised_mode = mode.lower()
     if normalised_mode not in {"vectorized", "iterative"}:
         raise ValueError("mode must be either 'vectorized' or 'iterative'.")
+
+    if has_per_slice and normalised_mode != "iterative":
+        raise ValueError("Per-slice arguments require mode='iterative'.")
 
     dtype_override = np.dtype(output_dtype) if output_dtype is not None else None
 
@@ -565,27 +791,37 @@ def apply_1d(
             data_xr,
             dim=dim,
             func=func,
-            args=args,
-            kwargs=kwargs,
+            arg_specs=arg_specs,
+            kwarg_specs=kwarg_specs,
             result_dim=result_dim,
             result_coords=result_coords,
             output_dtype=dtype_override,
         )
 
     combined_metadata = dict(auto_metadata)
-    if args:
-        combined_metadata["function_args"] = list(args)
-    if kwargs:
-        combined_metadata["function_kwargs"] = {str(k): _json_safe(v) for k, v in kwargs.items()}
+    if arg_specs:
+        combined_metadata["function_args"] = [
+            _json_safe(spec.constant_value) if spec.provider is None else "<per-slice>"
+            for spec in arg_specs
+        ]
+    if kwarg_specs:
+        combined_metadata["function_kwargs"] = {
+            str(k): (_json_safe(v.constant_value) if v.provider is None else "<per-slice>")
+            for k, v in kwarg_specs.items()
+        }
     if metadata:
         combined_metadata.update({str(k): _json_safe(v) for k, v in metadata.items()})
     if keep_input_metadata and "metadata" in data_xr.attrs:
         combined_metadata["source_metadata"] = data_xr.attrs["metadata"]
+    if per_slice_details:
+        combined_metadata["per_slice_arguments"] = _json_safe(per_slice_details)
     if timing_da is not None:
         combined_metadata["per_slice_duration"] = _json_safe(timing_da)
         combined_metadata["per_slice_duration_unit"] = "seconds"
 
     result_da.attrs["metadata"] = json.dumps(combined_metadata, indent=2, default=_json_safe)
+
+
 
     return result_da
 
