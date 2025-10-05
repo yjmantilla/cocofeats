@@ -188,6 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("--dry_run", action="store_true", help="If set, perform a dry run without actual processing.")
     parser.add_argument("--only_index", type=int, nargs='*', default=None, help="Only process files with these indices.")
     parser.add_argument("--raise_on_error", action="store_true", help="If set, raise exceptions on errors instead of logging them.")
+    #parser.add_argument("--make_final_dataframe", action="store_true", help="If set, make the final feature dataframe.")
     args = parser.parse_args()
 
     from cocofeats.loaders import load_configuration
