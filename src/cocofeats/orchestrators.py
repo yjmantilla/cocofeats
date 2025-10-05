@@ -123,25 +123,38 @@ def iterate_feature_pipeline(
 
                 node_callable(file_path, **node_kwargs)
             else:
-                result = run_feature(
-                    feature_entry.definition,
-                    feature_entry.name,
-                    file_path,
-                    reference_base=reference_base_path,
-                    dataset_config=datasets_configs[dataset_name],
-                    mount_point=mount_point,
-                    dry_run=dry_run,
-                )
-                if dry_run:
-                    res = {
-                        "index": index,
-                        "dataset": dataset_name,
-                        "file_path": file_path,
-                    }
-                    res.update(result)
-                    log.info("Dry run:", **res)
-                    dry_run_collection.append(res)
-
+                try:
+                    result = run_feature(
+                        feature_entry.definition,
+                        feature_entry.name,
+                        file_path,
+                        reference_base=reference_base_path,
+                        dataset_config=datasets_configs[dataset_name],
+                        mount_point=mount_point,
+                        dry_run=dry_run,
+                    )
+                    if dry_run:
+                        res = {
+                            "index": index,
+                            "dataset": dataset_name,
+                            "file_path": file_path,
+                        }
+                        res.update(result)
+                        log.info("Dry run:", **res)
+                        dry_run_collection.append(res)
+                except Exception as e:
+                    log.error(
+                        "Error running feature",
+                        index=index,
+                        dataset=dataset_name,
+                        file_path=file_path,
+                        feature=feature_label,
+                        error=str(e),
+                        exc_info=True,
+                    )
+                    if raise_on_error:
+                        raise e
+                    continue
 
             log.info(
                 "Processed file successfully",
