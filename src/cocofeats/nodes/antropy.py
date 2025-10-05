@@ -99,31 +99,31 @@ def _build_node(
     _node.__doc__ = f"Node wrapper for antropy.{name}."
 
 
-_build_node(app_entropy, name="app_entropy")
-_build_node(hjorth_params, name="hjorth_params", default_result_dim=_HJORTH_RESULT_DIM, default_result_coords=_HJORTH_RESULT_LABELS)
-_build_node(lziv_complexity, name="lziv_complexity")
-_build_node(num_zerocross, name="num_zerocross")
-_build_node(perm_entropy, name="perm_entropy")
-_build_node(sample_entropy, name="sample_entropy")
-_build_node(spectral_entropy, name="spectral_entropy")
-_build_node(svd_entropy, name="svd_entropy")
-_build_node(detrended_fluctuation, name="detrended_fluctuation")
-_build_node(higuchi_fd, name="higuchi_fd")
-_build_node(katz_fd, name="katz_fd")
-_build_node(petrosian_fd, name="petrosian_fd")
+_build_node(app_entropy, name="antropy_app_entropy")
+_build_node(hjorth_params, name="antropy_hjorth_params", default_result_dim=_HJORTH_RESULT_DIM, default_result_coords=_HJORTH_RESULT_LABELS)
+_build_node(lziv_complexity, name="antropy_lziv_complexity")
+_build_node(num_zerocross, name="antropy_num_zerocross")
+_build_node(perm_entropy, name="antropy_perm_entropy")
+_build_node(sample_entropy, name="antropy_sample_entropy")
+_build_node(spectral_entropy, name="antropy_spectral_entropy")
+_build_node(svd_entropy, name="antropy_svd_entropy")
+_build_node(detrended_fluctuation, name="antropy_detrended_fluctuation")
+_build_node(higuchi_fd, name="antropy_higuchi_fd")
+_build_node(katz_fd, name="antropy_katz_fd")
+_build_node(petrosian_fd, name="antropy_petrosian_fd")
 
 __all__ = [
-    "app_entropy",
-    "detrended_fluctuation",
-    "higuchi_fd",
-    "hjorth_params",
-    "katz_fd",
-    "lziv_complexity",
-    "num_zerocross",
-    "perm_entropy",
-    "petrosian_fd",
-    "sample_entropy",
-    "spectral_entropy",
-    "svd_entropy",
+    "antropy_app_entropy",
+    "antropy_detrended_fluctuation",
+    "antropy_higuchi_fd",
+    "antropy_hjorth_params",
+    "antropy_katz_fd",
+    "antropy_lziv_complexity",
+    "antropy_num_zerocross",
+    "antropy_perm_entropy",
+    "antropy_petrosian_fd",
+    "antropy_sample_entropy",
+    "antropy_spectral_entropy",
+    "antropy_svd_entropy",
 ]
 

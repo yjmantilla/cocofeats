@@ -286,7 +286,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: app_entropy
+        node: antropy_app_entropy
         args:
           data_like: id.0
           dim: 'times'
@@ -297,7 +297,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: hjorth_params
+        node: antropy_hjorth_params
         args:
           data_like: id.0
           dim: 'times'
@@ -313,7 +313,7 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
       - id: 2
-        node: lziv_complexity
+        node: antropy_lziv_complexity
         args:
           data_like: id.1
           dim: 'times'
@@ -324,7 +324,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: num_zerocross
+        node: antropy_num_zerocross
         args:
           data_like: id.0
           dim: 'times'
@@ -335,7 +335,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: perm_entropy
+        node: antropy_perm_entropy
         args:
           data_like: id.0
           dim: 'times'
@@ -346,7 +346,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: sample_entropy
+        node: antropy_sample_entropy
         args:
           data_like: id.0
           dim: 'times'
@@ -357,7 +357,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: spectral_entropy
+        node: antropy_spectral_entropy
         args:
           data_like: id.0
           dim: 'times'
@@ -369,7 +369,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: svd_entropy
+        node: antropy_svd_entropy
         args:
           data_like: id.0
           dim: 'times'
@@ -380,7 +380,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: higuchi_fd
+        node: antropy_higuchi_fd
         args:
           data_like: id.0
           dim: 'times'
@@ -391,7 +391,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: katz_fd
+        node: antropy_katz_fd
         args:
           data_like: id.0
           dim: 'times'
@@ -402,7 +402,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: petrosian_fd
+        node: antropy_petrosian_fd
         args:
           data_like: id.0
           dim: 'times'
@@ -413,7 +413,18 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep10min.fif
       - id: 1
-        node: detrended_fluctuation
+        node: antropy_detrended_fluctuation
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  NeurokitComplexityDelay:
+    overwrite: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: neurokit2_complexity_delay
         args:
           data_like: id.0
           dim: 'times'
@@ -446,3 +457,4 @@ FeatureList:
   - AntropyKatzFD5seg
   - AntropyPetrosianFD5seg
   - AntropyDetrendedFluctuation10min
+  #- NeurokitComplexityDelay

@@ -364,7 +364,7 @@ def _build_node(name: str, func: CallableLike) -> None:
 
 
 _NEUROKIT_FUNCTIONS: Mapping[str, CallableLike] = {
-    "complexity_delay": nk.complexity_delay,
+    "neurokit2_complexity_delay": nk.complexity_delay,
 }
 
 
@@ -372,4 +372,4 @@ for _name, _func in _NEUROKIT_FUNCTIONS.items():  # pragma: no cover - registrat
     _build_node(_name, _func)
 
 
-__all__ = ["complexity_delay"]
+__all__ = ["neurokit2_complexity_delay"]
