@@ -214,6 +214,7 @@ def run_feature(
       - 'node' steps: execute; if it's the last step, save artifacts under '@<FeatureName>*'.
     """
     overwrite = bool(feature_def.get("overwrite", False))
+    save = bool(feature_def.get("save", True))
     nodes = feature_def.get("nodes", [])
     order = _topo_order(nodes)
 
@@ -226,20 +227,31 @@ def run_feature(
             plan.append(kwargs)
 
     # In dry-run, also check the final output of the feature upfront
-    final_prefix = reference_base.as_posix() + "@" + snake_to_camel(feature_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name)
+    base_reference = reference_base.as_posix() if isinstance(reference_base, Path) else reference_base
+    final_prefix = base_reference + "@" + snake_to_camel(feature_name) if save else None
     if dry_run:
-        final_candidates = _artifact_candidates_for(final_prefix)
-        _record(
-            id="final",
-            kind="feature_output",
-            name=feature_name,
-            prefix=final_prefix,
-            cached=len(final_candidates) > 0,
-            paths=final_candidates,
-        )
+        if save:
+            final_candidates = _artifact_candidates_for(final_prefix)
+            _record(
+                id="final",
+                kind="feature_output",
+                name=feature_name,
+                prefix=final_prefix,
+                cached=len(final_candidates) > 0,
+                paths=final_candidates,
+            )
+        else:
+            _record(
+                id="final",
+                kind="feature_output",
+                name=feature_name,
+                will_save=False,
+                cached=False,
+                paths=[],
+            )
     else:
         # Early skip if final already cached and not overwriting
-        if not overwrite:
+        if save and not overwrite:
             final_candidates = _artifact_candidates_for(final_prefix)
             if len(final_candidates) > 0:
                 log.info(
@@ -368,20 +380,20 @@ def run_feature(
                 store[sid] = res
                 last_result = res
 
-                if sid == order[-1]:
+                if sid == order[-1] and save:
                     # save final artifacts under '@<FeatureName>'
-                    reference_path = reference_base.as_posix() + "@" + snake_to_camel(feature_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name)
+                    assert final_prefix is not None
                     for artifact_name, artifact in res.artifacts.items():
                         try:
                             log.info("Processed artifact", name=artifact_name, file=artifact)
-                            artifact_path = reference_path + artifact_name
+                            artifact_path = final_prefix + artifact_name
                             artifact.writer(artifact_path)
                             log.info("Saved artifact", file=artifact_path)
                         except Exception as e:
                             log.error(
                                 "Error saving artifact",
                                 artifact_name=artifact_name,
-                                path=reference_path + artifact_name,
+                                path=final_prefix + artifact_name,
                                 error=str(e),
                                 exc_info=True,
                             )
@@ -396,18 +408,22 @@ def run_feature(
                     exc_info=True,
                 )
                 # try to save a dummy file .error to mark failure
-                try:
-                    error_path = reference_base.as_posix() + "@" + snake_to_camel(feature_name) + ".error" if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name) + ".error"
-                    with open(error_path, "w", encoding="utf-8") as ef:
-                        ef.write(f"Feature '{feature_name}' step id={sid} node='{node_name}' failed:\n{str(e)}\n")
-                    log.info("Wrote error marker file", path=error_path)
-                except Exception as ee:
-                    log.error(
-                        "Error writing error marker file",
-                        path=error_path,
-                        error=str(ee),
-                        exc_info=True,
-                    )
+                if save:
+                    try:
+                        assert final_prefix is not None
+                        error_path = final_prefix + ".error"
+                        with open(error_path, "w", encoding="utf-8") as ef:
+                            ef.write(
+                                f"Feature '{feature_name}' step id={sid} node='{node_name}' failed:\n{str(e)}\n"
+                            )
+                        log.info("Wrote error marker file", path=error_path)
+                    except Exception as ee:
+                        log.error(
+                            "Error writing error marker file",
+                            path=final_prefix + ".error" if final_prefix else None,
+                            error=str(ee),
+                            exc_info=True,
+                        )
                 raise
         else:
             raise ValueError(f"Step id={sid} must specify 'feature' or 'node'")
