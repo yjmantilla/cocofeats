@@ -424,7 +424,7 @@ FeatureDefinitions:
       - id: 0
         feature: BasicPrep5seg.fif
       - id: 1
-        node: neurokit2_complexity_delay
+        node: neurokit_complexity_delay
         args:
           data_like: id.0
           dim: 'times'

@@ -20,7 +20,7 @@ def _make_dataarray() -> xr.DataArray:
 
 def test_app_entropy_node_matches_antropy() -> None:
     da = _make_dataarray()
-    node = get_node("app_entropy")
+    node = get_node("antropy_app_entropy")
 
     result = node(da, dim="times", order=2, tolerance=0.2)
     out = result.artifacts[".nc"].item
@@ -36,7 +36,7 @@ def test_app_entropy_node_matches_antropy() -> None:
 
 def test_hjorth_params_node_sets_component_labels() -> None:
     da = _make_dataarray()
-    node = get_node("hjorth_params")
+    node = get_node("antropy_hjorth_params")
 
     result = node(da, dim="times")
     out = result.artifacts[".nc"].item
@@ -51,7 +51,7 @@ def test_hjorth_params_node_sets_component_labels() -> None:
 
 def test_spectral_entropy_node_requires_sampling_frequency() -> None:
     da = _make_dataarray()
-    node = get_node("spectral_entropy")
+    node = get_node("antropy_spectral_entropy")
 
     sf = 128.0
     result = node(da, dim="times", sf=sf)

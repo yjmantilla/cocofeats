@@ -23,7 +23,7 @@ def _make_dataarray() -> xr.DataArray:
 
 def test_complexity_delay_node_produces_dataset_with_png_figures() -> None:
     da = _make_dataarray()
-    node = get_node("complexity_delay")
+    node = get_node("neurokit_complexity_delay")
 
     result = node(
         da,
@@ -56,7 +56,7 @@ def test_complexity_delay_node_produces_dataset_with_png_figures() -> None:
 
 def test_complexity_delay_node_supports_rgba_encoding() -> None:
     da = _make_dataarray()
-    node = get_node("complexity_delay")
+    node = get_node("neurokit_complexity_delay")
 
     result = node(
         da,
