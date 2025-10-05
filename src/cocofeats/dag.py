@@ -361,31 +361,54 @@ def run_feature(
 
             kwargs = _prep_kwargs(step.get("args", {}), store)
             log.debug("Execute node", feature=feature_name, id=sid, node=node_name, kwargs=kwargs)
-            res = fn(**kwargs, **extra_args)
-            if not isinstance(res, NodeResult):
-                raise TypeError(f"Node {node_name} must return NodeResult")
-            store[sid] = res
-            last_result = res
+            try:
+                res = fn(**kwargs, **extra_args)
+                if not isinstance(res, NodeResult):
+                    raise TypeError(f"Node {node_name} must return NodeResult")
+                store[sid] = res
+                last_result = res
 
-            if sid == order[-1]:
-                # save final artifacts under '@<FeatureName>'
-                reference_path = reference_base.as_posix() + "@" + snake_to_camel(feature_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name)
-                for artifact_name, artifact in res.artifacts.items():
-                    try:
-                        log.info("Processed artifact", name=artifact_name, file=artifact)
-                        artifact_path = reference_path + artifact_name
-                        artifact.writer(artifact_path)
-                        log.info("Saved artifact", file=artifact_path)
-                    except Exception as e:
-                        log.error(
-                            "Error saving artifact",
-                            artifact_name=artifact_name,
-                            path=reference_path + artifact_name,
-                            error=str(e),
-                            exc_info=True,
-                        )
-                        raise
-
+                if sid == order[-1]:
+                    # save final artifacts under '@<FeatureName>'
+                    reference_path = reference_base.as_posix() + "@" + snake_to_camel(feature_name) if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name)
+                    for artifact_name, artifact in res.artifacts.items():
+                        try:
+                            log.info("Processed artifact", name=artifact_name, file=artifact)
+                            artifact_path = reference_path + artifact_name
+                            artifact.writer(artifact_path)
+                            log.info("Saved artifact", file=artifact_path)
+                        except Exception as e:
+                            log.error(
+                                "Error saving artifact",
+                                artifact_name=artifact_name,
+                                path=reference_path + artifact_name,
+                                error=str(e),
+                                exc_info=True,
+                            )
+                            raise
+            except Exception as e:
+                log.error(
+                    "Error executing node",
+                    feature=feature_name,
+                    id=sid,
+                    node=node_name,
+                    error=str(e),
+                    exc_info=True,
+                )
+                # try to save a dummy file .error to mark failure
+                try:
+                    error_path = reference_base.as_posix() + "@" + snake_to_camel(feature_name) + ".error" if isinstance(reference_base, Path) else reference_base + "@" + snake_to_camel(feature_name) + ".error"
+                    with open(error_path, "w", encoding="utf-8") as ef:
+                        ef.write(f"Feature '{feature_name}' step id={sid} node='{node_name}' failed:\n{str(e)}\n")
+                    log.info("Wrote error marker file", path=error_path)
+                except Exception as ee:
+                    log.error(
+                        "Error writing error marker file",
+                        path=error_path,
+                        error=str(ee),
+                        exc_info=True,
+                    )
+                raise
         else:
             raise ValueError(f"Step id={sid} must specify 'feature' or 'node'")
 
