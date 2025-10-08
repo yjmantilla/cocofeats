@@ -3,5 +3,7 @@ psychostimulants:
   name: PsychoStimulants
   file_pattern: 
     local: "_data/psychostimulants/**/*.vhdr"
+    fir: /home/yorguin/projects/def-kjerbi/data/EEG_psychostimulants_2025-02/BIDS
   derivatives_path: 
-    local: "_outputs/psychostimulants"
+    local: "_outputs/psychostimulants/**/*.vhdr"
+    fir: "/home/yorguin/scratch/real_scratch"
