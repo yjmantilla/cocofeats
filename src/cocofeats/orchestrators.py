@@ -10,7 +10,7 @@ from cocofeats.loggers import get_logger
 from cocofeats.utils import get_path
 from cocofeats.nodes import get_node, list_nodes
 from cocofeats.features import get_feature, list_features
-from cocofeats.dag import run_feature
+from cocofeats.dag import collect_feature_for_dataframe, run_feature
 from cocofeats.loaders import load_configuration
 from cocofeats.features.pipeline import register_features_from_dict
 import pandas as pd
@@ -179,6 +179,155 @@ def iterate_feature_pipeline(
     if dry_run:
         return pd.DataFrame(dry_run_collection)
 
+
+def build_feature_dataframe(
+    pipeline_configuration: dict | str,
+    *,
+    include_features: List[str] | None = None,
+    max_files_per_dataset: int | None = None,
+    only_index: int | List[int] | None = None,
+    raise_on_error: bool = False,
+) -> pd.DataFrame:
+    """
+    Assemble a dataframe by collecting feature artifacts for every file in a pipeline configuration.
+
+    Parameters
+    ----------
+    pipeline_configuration : dict | str
+        Pipeline configuration or path to it.
+    include_features : list[str], optional
+        Restrict collection to this explicit subset of feature names.
+    max_files_per_dataset : int, optional
+        Limit the number of files processed per dataset.
+    only_index : int | list[int], optional
+        Restrict collection to specific indices (matching iterate_feature_pipeline behaviour).
+    raise_on_error : bool, optional
+        Re-raise exceptions encountered while collecting features; defaults to False.
+
+    Returns
+    -------
+    pandas.DataFrame
+        A dataframe with one row per processed file and columns derived from collected feature artifacts.
+    """
+
+    log.debug("build_feature_dataframe: called", pipeline_configuration=pipeline_configuration)
+
+    config_dict = load_configuration(pipeline_configuration) if isinstance(pipeline_configuration, str) else pipeline_configuration
+
+    if "FeatureDefinitions" not in config_dict:
+        log.warning("No 'FeatureDefinitions' found in the configuration. Returning empty dataframe.")
+        return pd.DataFrame()
+
+    register_features_from_dict(config_dict)
+
+    feature_definitions: dict[str, dict] = config_dict.get("FeatureDefinitions", {}) or {}
+    selected_features: list[str] = []
+    for feature_name, feature_def in feature_definitions.items():
+        if include_features is not None and feature_name not in include_features:
+            continue
+        if not feature_def.get("for_dataframe", True):
+            continue
+        selected_features.append(feature_name)
+
+    if include_features:
+        missing_features = sorted(set(include_features) - set(selected_features))
+        if missing_features:
+            log.warning("Some requested features are either undefined or flagged out of dataframe collection.", missing_features=missing_features)
+
+    if not selected_features:
+        log.warning("No features eligible for dataframe collection were found. Returning empty dataframe.")
+        return pd.DataFrame(columns=["index", "dataset", "file_path"])
+
+    datasets_configs, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(
+        pipeline_configuration
+    )
+
+    files_per_dataset, all_files, common_roots = get_all_files_from_pipeline_configuration(
+        pipeline_configuration, max_files_per_dataset=max_files_per_dataset
+    )
+    log.debug("build_feature_dataframe: enumerated files", total_files=len(all_files), per_dataset=files_per_dataset)
+
+    if only_index is not None:
+        index_filter = only_index if isinstance(only_index, list) else [only_index]
+        filtered = [item for item in all_files if item[0] in index_filter]
+        if len(filtered) != len(index_filter):
+            detected = [item[0] for item in filtered]
+            missing = list(set(index_filter) - set(detected))
+            log.warning("Some indices requested for dataframe collection were not found.", requested=index_filter, missing=missing)
+        all_files = filtered
+
+    rows: list[dict[str, Any]] = []
+    for index, dataset_name, file_path in all_files:
+        try:
+            dataset_config = datasets_configs[dataset_name]
+            common_root = common_roots.get(dataset_name)
+            reference_base = _build_reference_base(file_path, dataset_config, common_root, mount_point)
+            row: dict[str, Any] = {
+                "index": index,
+                "dataset": dataset_name,
+                "file_path": file_path,
+            }
+            for feature_name in selected_features:
+                feature_def = feature_definitions.get(feature_name, {}) or {}
+                try:
+                    row.update(
+                        collect_feature_for_dataframe(
+                            feature_def,
+                            feature_name,
+                            file_path,
+                            reference_base=reference_base,
+                            dataset_config=dataset_config,
+                            mount_point=mount_point,
+                        )
+                    )
+                except Exception as feature_error:
+                    log.error(
+                        "Error collecting feature for dataframe",
+                        feature=feature_name,
+                        index=index,
+                        dataset=dataset_name,
+                        file_path=file_path,
+                        error=str(feature_error),
+                        exc_info=True,
+                    )
+                    if raise_on_error:
+                        raise
+                    row[f"{feature_name}__error"] = str(feature_error)
+            rows.append(row)
+            log.debug(
+                "Collected dataframe row",
+                index=index,
+                dataset=dataset_name,
+                file_path=file_path,
+                collected_features=len(selected_features),
+            )
+        except Exception as error:
+            log.error(
+                "Error collecting dataframe row",
+                index=index,
+                dataset=dataset_name,
+                file_path=file_path,
+                error=str(error),
+                exc_info=True,
+            )
+            if raise_on_error:
+                raise
+
+    return pd.DataFrame(rows)
+
+
+def _build_reference_base(file_path: str, dataset_config, common_root: str | None, mount_point: Path | None) -> Path:
+    derivatives_path = dataset_config.derivatives_path
+    if derivatives_path:
+        derivatives_path = get_path(derivatives_path, mount_point=mount_point)
+        os.makedirs(derivatives_path, exist_ok=True)
+        reference_base = os.path.relpath(file_path, start=common_root) if common_root else file_path
+        reference_base = os.path.join(derivatives_path, reference_base)
+        os.makedirs(os.path.dirname(reference_base), exist_ok=True)
+    else:
+        reference_base = file_path
+    return Path(reference_base)
+
 if __name__ == "__main__":
     # Parse args and run iterate_feature_pipeline
     import argparse
@@ -188,7 +337,19 @@ if __name__ == "__main__":
     parser.add_argument("--dry_run", action="store_true", help="If set, perform a dry run without actual processing.")
     parser.add_argument("--only_index", type=int, nargs='*', default=None, help="Only process files with these indices.")
     parser.add_argument("--raise_on_error", action="store_true", help="If set, raise exceptions on errors instead of logging them.")
-    #parser.add_argument("--make_final_dataframe", action="store_true", help="If set, make the final feature dataframe.")
+    parser.add_argument("--make_final_dataframe", action="store_true", help="If set, build the final feature dataframe after processing.")
+    parser.add_argument(
+        "--dataframe_output",
+        type=str,
+        default=None,
+        help="Optional path where the dataframe should be written (CSV by default, or Parquet if the extension is .parquet).",
+    )
+    parser.add_argument(
+        "--dataframe_features",
+        nargs="*",
+        default=None,
+        help="Optional subset of feature names to include when building the dataframe.",
+    )
     args = parser.parse_args()
 
     from cocofeats.loaders import load_configuration
@@ -199,12 +360,46 @@ if __name__ == "__main__":
         log.error("No features specified in the pipeline configuration under 'FeatureList'. Exiting.")
         exit(1)
 
-    for feature in feature_list:
-        iterate_feature_pipeline(
+    if not args.make_final_dataframe:  # and args.dataframe_output:
+        for feature in feature_list:
+            iterate_feature_pipeline(
+                pipeline_configuration=pipeline_configuration,
+                feature=feature,
+                max_files_per_dataset=args.max_files_per_dataset,
+                dry_run=args.dry_run,
+                only_index=args.only_index,
+                raise_on_error=True if args.raise_on_error else False,
+            )
+
+    if args.make_final_dataframe:
+        log.info("Building feature dataframe", features=args.dataframe_features)
+        dataframe = build_feature_dataframe(
             pipeline_configuration=pipeline_configuration,
-            feature=feature,
+            include_features=args.dataframe_features,
             max_files_per_dataset=args.max_files_per_dataset,
-            dry_run=args.dry_run,
             only_index=args.only_index,
-            raise_on_error = True if args.raise_on_error else False,
+            raise_on_error=True if args.raise_on_error else False,
         )
+        if args.dataframe_output:
+            output_path = Path(args.dataframe_output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            if output_path.suffix.lower() == ".parquet":
+                try:
+                    dataframe.to_parquet(output_path, index=False)
+                except (ImportError, ValueError) as parquet_error:
+                    log.warning(
+                        "Parquet export failed; saving as CSV instead.",
+                        path=str(output_path),
+                        error=str(parquet_error),
+                    )
+                    csv_fallback = output_path.with_suffix(".csv")
+                    dataframe.to_csv(csv_fallback, index=False)
+                    log.info("Saved feature dataframe", path=str(csv_fallback), rows=len(dataframe), columns=list(dataframe.columns))
+                else:
+                    log.info("Saved feature dataframe", path=str(output_path), rows=len(dataframe), columns=list(dataframe.columns))
+            else:
+                dataframe.to_csv(output_path, index=False)
+                log.info("Saved feature dataframe", path=str(output_path), rows=len(dataframe), columns=list(dataframe.columns))
+        else:
+            log.info("Feature dataframe built (not saved to disk)", rows=len(dataframe), columns=list(dataframe.columns))
+            print(dataframe)

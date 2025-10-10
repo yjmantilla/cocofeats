@@ -1,9 +1,21 @@
 # dag_exec.py
 import glob
 import inspect
+import json
 import re
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Dict, List, Set
+
+try:
+    import numpy as np
+except ImportError:  # pragma: no cover - optional dependency
+    np = None
+
+try:
+    import xarray as xr
+except ImportError:  # pragma: no cover - optional dependency
+    xr = None
 
 import yaml
 
@@ -440,3 +452,155 @@ def run_feature(
     if last_result is None:
         raise RuntimeError(f"Feature '{feature_name}' produced no result")
     return last_result
+
+
+def collect_feature_for_dataframe(
+    feature_def: dict,
+    feature_name: str,
+    file_path: str,
+    reference_base: Path,
+    dataset_config: Any = None,
+    mount_point: Path | None = None,
+) -> dict[str, Any]:
+    """
+    Collect artifacts for a feature and convert them into dataframe-ready values.
+
+    This helper prefers cached artifacts if they exist on disk. If none are available,
+    it will execute ``run_feature`` to obtain the necessary results (without forcing a recompute
+    when cached outputs are already present).
+
+    Returns a dictionary suitable for composing a DataFrame row, with columns named
+    ``{feature_name}{artifact_suffix}``.
+    """
+
+    artifact_payloads = _resolve_feature_artifacts(
+        feature_def,
+        feature_name,
+        file_path,
+        reference_base,
+        dataset_config=dataset_config,
+        mount_point=mount_point,
+    )
+
+    row_values: dict[str, Any] = {}
+    for suffix, payload in artifact_payloads.items():
+        column_name = f"{feature_name}{suffix}"
+        row_values[column_name] = _simplify_artifact_payload(payload, suffix=suffix)
+    return row_values
+
+
+def _resolve_feature_artifacts(
+    feature_def: dict,
+    feature_name: str,
+    file_path: str,
+    reference_base: Path,
+    dataset_config: Any = None,
+    mount_point: Path | None = None,
+) -> dict[str, Any]:
+    save = bool(feature_def.get("save", True))
+    base_reference = reference_base.as_posix() if isinstance(reference_base, Path) else reference_base
+    prefix = base_reference + "@" + snake_to_camel(feature_name)
+
+    payloads: dict[str, Any] = {}
+    if save:
+        cached_paths = _artifact_candidates_for(prefix)
+        if cached_paths:
+            for path in cached_paths:
+                suffix = path[len(prefix) :]
+                payloads[suffix] = Path(path)
+            return payloads
+
+    result = run_feature(
+        feature_def,
+        feature_name,
+        file_path,
+        reference_base,
+        dataset_config=dataset_config,
+        mount_point=mount_point,
+        dry_run=False,
+    )
+
+    if isinstance(result, NodeResult):
+        for suffix, artifact in result.artifacts.items():
+            payload: Any = artifact.item
+            if save:
+                artifact_path = prefix + suffix
+                if Path(artifact_path).exists():
+                    payload = Path(artifact_path)
+            payloads[suffix] = payload
+        return payloads
+
+    if isinstance(result, dict) and "cached" in result:
+        paths = result["cached"]
+        for path in paths:
+            suffix = path[len(prefix) :]
+            payloads[suffix] = Path(path)
+        return payloads
+
+    raise RuntimeError(f"Unexpected result type when collecting feature '{feature_name}': {type(result)!r}")
+
+
+def _simplify_artifact_payload(payload: Any, *, suffix: str) -> Any:
+    if isinstance(payload, Path):
+        return _load_from_path(payload, suffix=suffix)
+    return _simplify_value(payload)
+
+
+def _load_from_path(path: Path, *, suffix: str) -> Any:
+    try:
+        if suffix.endswith(".json"):
+            with open(path, "r", encoding="utf-8") as handle:
+                return json.load(handle)
+        if suffix.endswith(".nc") and xr is not None:
+            try:
+                data_array = xr.open_dataarray(path)
+                loaded = data_array.load()
+                data_array.close()
+                return _simplify_value(loaded)
+            except Exception:
+                dataset = xr.open_dataset(path)
+                loaded = dataset.load()
+                dataset.close()
+                return _simplify_value(loaded)
+        if suffix.endswith(".txt") or suffix.endswith(".log"):
+            return path.read_text(encoding="utf-8")
+    except Exception:
+        log.warning("Failed to load artifact payload, falling back to path", path=str(path), suffix=suffix, exc_info=True)
+    return path.as_posix()
+
+
+def _simplify_value(value: Any) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+
+    if isinstance(value, Path):
+        return value.as_posix()
+
+    if np is not None:
+        if isinstance(value, np.ndarray):
+            return value.tolist()
+        if isinstance(value, np.generic):
+            return value.item()
+
+    if xr is not None and isinstance(value, (xr.DataArray, xr.Dataset)):
+        try:
+            return value.to_dict(data=True)
+        except Exception:
+            return repr(value)
+
+    if isinstance(value, Mapping):
+        return {str(k): _simplify_value(v) for k, v in value.items()}
+
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_simplify_value(v) for v in value]
+
+    if hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
+        try:
+            return _simplify_value(value.to_dict())
+        except Exception:
+            pass
+
+    if hasattr(value, "__dict__") and not isinstance(value, type):
+        return {str(k): _simplify_value(v) for k, v in vars(value).items()}
+
+    return repr(value)

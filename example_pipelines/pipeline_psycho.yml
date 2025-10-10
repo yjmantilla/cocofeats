@@ -4,6 +4,7 @@ mount_point: local
 FeatureDefinitions:
   BasicPrep5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: SourceFile
@@ -41,6 +42,7 @@ FeatureDefinitions:
 
   BasicPrep10min:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: SourceFile
@@ -78,6 +80,7 @@ FeatureDefinitions:
 
   CheckLineFrequency:
     overwrite : False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: SourceFile
@@ -99,6 +102,7 @@ FeatureDefinitions:
 
   SpectrumArrayMultitaper5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -117,6 +121,7 @@ FeatureDefinitions:
 
   SpectrumArrayMultitaper10min:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep10min.fif
@@ -135,6 +140,7 @@ FeatureDefinitions:
 
   SpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -175,6 +181,7 @@ FeatureDefinitions:
 
   FooofSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: SpectrumArrayWelchEpochsAverage5seg.nc
@@ -197,6 +204,7 @@ FeatureDefinitions:
 
   FooofAperiodicSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
@@ -214,6 +222,7 @@ FeatureDefinitions:
 
   FooofPeriodicSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
@@ -231,6 +240,7 @@ FeatureDefinitions:
 
   FooofResidualSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
@@ -248,6 +258,7 @@ FeatureDefinitions:
 
   FooofAllSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
@@ -265,6 +276,7 @@ FeatureDefinitions:
 
   FooofScalarsAllSpectrumArrayWelchEpochsAverage5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: FooofSpectrumArrayWelchEpochsAverage5seg.nc
@@ -293,6 +305,7 @@ FeatureDefinitions:
 
   AntropyHjorthParams5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -420,6 +433,7 @@ FeatureDefinitions:
 
   NeurokitComplexityDelay:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
