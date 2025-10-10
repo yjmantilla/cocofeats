@@ -222,13 +222,15 @@ def build_feature_dataframe(
 
     feature_definitions: dict[str, dict] = config_dict.get("FeatureDefinitions", {}) or {}
     selected_features: list[str] = []
+    
+    include_features = config_dict.get("FeatureList", []) if include_features is None else include_features
+
     for feature_name, feature_def in feature_definitions.items():
         if include_features is not None and feature_name not in include_features:
             continue
         if not feature_def.get("for_dataframe", True):
             continue
         selected_features.append(feature_name)
-
     if include_features:
         missing_features = sorted(set(include_features) - set(selected_features))
         if missing_features:

@@ -14,6 +14,7 @@ import numpy as np
 
 log = get_logger(__name__)
 
+@register_node(name="binarize_with_median", override=True)
 def binarize_with_median(data: xr.DataArray, dim: str) -> xr.DataArray:
     """
     Binarize an xarray DataArray along a specified dimension using the median value.
@@ -120,6 +121,7 @@ def extract_data_var(dataset_like, data_var: str):
     return NodeResult(artifacts=artifacts)
 
 
+@register_node(name="slice_xarray", override=True)
 def slice_xarray(xarray_data, dim, start=None, end=None):
     """
     Slice an xarray DataArray along a specified dimension.

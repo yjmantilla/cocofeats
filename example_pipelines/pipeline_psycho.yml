@@ -320,10 +320,10 @@ FeatureDefinitions:
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
-      - id1:
+      - id: 1
         node: binarize_with_median
         args:
-          data_like: id.0
+          data: id.0
           dim: 'times'
       - id: 2
         node: antropy_lziv_complexity

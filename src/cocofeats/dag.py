@@ -461,6 +461,9 @@ def collect_feature_for_dataframe(
     reference_base: Path,
     dataset_config: Any = None,
     mount_point: Path | None = None,
+    *,
+    flatten_xarray_artifacts: bool = True,
+    sort_flattened_dims: bool = True,
 ) -> dict[str, Any]:
     """
     Collect artifacts for a feature and convert them into dataframe-ready values.
@@ -469,8 +472,17 @@ def collect_feature_for_dataframe(
     it will execute ``run_feature`` to obtain the necessary results (without forcing a recompute
     when cached outputs are already present).
 
+    Parameters
+    ----------
+    flatten_xarray_artifacts:
+        When True, ``xr.DataArray`` artifacts (or paths to ``.nc`` files containing them)
+        are flattened into multiple columns using their coordinate metadata.
+    sort_flattened_dims:
+        When flattening a ``DataArray``, sort dimension names alphanumerically when constructing
+        the column suffix.
+
     Returns a dictionary suitable for composing a DataFrame row, with columns named
-    ``{feature_name}{artifact_suffix}``.
+    ``{feature_name}{artifact_suffix}`` (with optional BIDS-like suffixes per flattened element).
     """
 
     artifact_payloads = _resolve_feature_artifacts(
@@ -485,7 +497,27 @@ def collect_feature_for_dataframe(
     row_values: dict[str, Any] = {}
     for suffix, payload in artifact_payloads.items():
         column_name = f"{feature_name}{suffix}"
-        row_values[column_name] = _simplify_artifact_payload(payload, suffix=suffix)
+        simplified = _simplify_artifact_payload(
+            payload,
+            suffix=suffix,
+            flatten_xarray=flatten_xarray_artifacts,
+            sort_dims_alphabetically=sort_flattened_dims,
+        )
+        if isinstance(simplified, _FlattenedArtifactColumns):
+            for flatten_suffix, value in simplified.items():
+                target_column = (
+                    column_name if flatten_suffix == "" else f"{column_name}@{flatten_suffix}"
+                )
+                if target_column in row_values:
+                    log.warning(
+                        "Overwriting dataframe column while flattening artifact",
+                        column=target_column,
+                        feature=feature_name,
+                        suffix=suffix,
+                    )
+                row_values[target_column] = value
+        else:
+            row_values[column_name] = simplified
     return row_values
 
 
@@ -540,10 +572,21 @@ def _resolve_feature_artifacts(
     raise RuntimeError(f"Unexpected result type when collecting feature '{feature_name}': {type(result)!r}")
 
 
-def _simplify_artifact_payload(payload: Any, *, suffix: str) -> Any:
-    if isinstance(payload, Path):
-        return _load_from_path(payload, suffix=suffix)
-    return _simplify_value(payload)
+def _simplify_artifact_payload(
+    payload: Any,
+    *,
+    suffix: str,
+    flatten_xarray: bool = False,
+    sort_dims_alphabetically: bool = True,
+) -> Any:
+    value = _load_from_path(payload, suffix=suffix) if isinstance(payload, Path) else payload
+
+    if flatten_xarray and xr is not None and isinstance(value, xr.DataArray):
+        return _flatten_dataarray_payload(
+            value, sort_dims_alphabetically=sort_dims_alphabetically
+        )
+
+    return _simplify_value(value)
 
 
 def _load_from_path(path: Path, *, suffix: str) -> Any:
@@ -556,17 +599,107 @@ def _load_from_path(path: Path, *, suffix: str) -> Any:
                 data_array = xr.open_dataarray(path)
                 loaded = data_array.load()
                 data_array.close()
-                return _simplify_value(loaded)
+                return loaded
             except Exception:
                 dataset = xr.open_dataset(path)
                 loaded = dataset.load()
                 dataset.close()
-                return _simplify_value(loaded)
+                return loaded
         if suffix.endswith(".txt") or suffix.endswith(".log"):
             return path.read_text(encoding="utf-8")
     except Exception:
         log.warning("Failed to load artifact payload, falling back to path", path=str(path), suffix=suffix, exc_info=True)
     return path.as_posix()
+
+
+class _FlattenedArtifactColumns(dict):
+    """Marker mapping used to expand flattened DataArray payloads into multiple columns."""
+
+
+def _flatten_dataarray_payload(
+    data_array: "xr.DataArray", *, sort_dims_alphabetically: bool
+) -> _FlattenedArtifactColumns:
+    if data_array.ndim == 0:
+        try:
+            scalar = data_array.item()
+        except Exception:
+            scalar = data_array.values
+        return _FlattenedArtifactColumns({"": _simplify_value(scalar)})
+
+    dims = list(data_array.dims)
+    shape = tuple(data_array.sizes[dim] for dim in dims)
+    index_iterator = _ndindex(shape)
+
+    flattened: dict[str, Any] = {}
+    for index_tuple in index_iterator:
+        dims_with_values = []
+        for dim, idx in zip(dims, index_tuple):
+            coord_value = None
+            if dim in data_array.indexes:
+                try:
+                    coord_value = data_array.indexes[dim][idx]
+                except Exception:
+                    coord_value = idx
+            elif dim in data_array.coords:
+                coord = data_array.coords[dim]
+                try:
+                    coord_value = coord.values[idx]
+                except Exception:
+                    coord_value = coord[idx]
+            else:
+                coord_value = idx
+            dims_with_values.append((dim, coord_value))
+
+        if sort_dims_alphabetically:
+            dims_with_values.sort(key=lambda item: item[0])
+
+        # Build a BIDS-like segment: dim-dimvalue pairs joined by underscores.
+        key = "_".join(
+            f"{dim}-{_format_coord_value(coord_value)}" for dim, coord_value in dims_with_values
+        )
+
+        try:
+            raw_value = data_array.data[index_tuple]
+        except Exception:
+            raw_value = data_array.values[index_tuple]
+
+        flattened[key] = _simplify_value(raw_value)
+
+    return _FlattenedArtifactColumns(flattened)
+
+
+def _ndindex(shape: Sequence[int]):
+    if np is not None:
+        return np.ndindex(*shape)
+    return _ndindex_fallback(shape)
+
+
+def _ndindex_fallback(shape: Sequence[int]):
+    if not shape:
+        yield ()
+        return
+    indices = [0] * len(shape)
+    while True:
+        yield tuple(indices)
+        for axis in reversed(range(len(shape))):
+            indices[axis] += 1
+            if indices[axis] < shape[axis]:
+                break
+            indices[axis] = 0
+            if axis == 0:
+                return
+
+
+def _format_coord_value(value: Any) -> str:
+    if hasattr(value, "item"):
+        try:
+            value = value.item()
+        except Exception:
+            pass
+    text = "NA" if value is None else str(value)
+    sanitized = re.sub(r"[^0-9A-Za-z\-.]+", "-", text)
+    sanitized = sanitized.strip("-")
+    return sanitized or "NA"
 
 
 def _simplify_value(value: Any) -> Any:
