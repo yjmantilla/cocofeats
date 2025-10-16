@@ -60,6 +60,18 @@ def iterate_feature_pipeline(
         pipeline_configuration, max_files_per_dataset=None #max_files_per_dataset, to obtain all files and then filter by only_index
     )
 
+    # now apply max_files_per_dataset if specified
+    if max_files_per_dataset is not None:
+        filtered_files = []
+        dataset_file_count = {dataset: 0 for dataset in files_per_dataset.keys()}
+        for item in all_files:
+            dataset_name = item[1]
+            if dataset_file_count[dataset_name] < max_files_per_dataset:
+                filtered_files.append(item)
+                dataset_file_count[dataset_name] += 1
+        all_files = filtered_files
+        log.debug("iterate_call_pipeline: applied max_files_per_dataset filter", max_files_per_dataset=max_files_per_dataset, total_files=len(all_files), per_dataset=dataset_file_count)
+
     log.info("iterate_call_pipeline: starting processing", total_files=len(all_files))
 
     dry_run_collection = []
