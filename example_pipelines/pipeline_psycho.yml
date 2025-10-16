@@ -1,6 +1,6 @@
 datasets: example_pipelines/datasets_psycho.yml
 mount_point: local
-
+definitions: ''
 FeatureDefinitions:
   BasicPrep5seg:
     overwrite: False
