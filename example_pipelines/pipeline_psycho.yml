@@ -292,16 +292,6 @@ FeatureDefinitions:
           component: 'all'
           freq_dim: 'frequencies'
 
-  AntropyAppEntropy5seg:
-    overwrite: False
-    nodes:
-      - id: 0
-        feature: BasicPrep5seg.fif
-      - id: 1
-        node: antropy_app_entropy
-        args:
-          data_like: id.0
-          dim: 'times'
 
   AntropyHjorthParams5seg:
     overwrite: False
@@ -315,8 +305,33 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  AntropyAppEntropy5seg:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: BasicPrep5seg.fif
+      - id: 1
+        node: antropy_app_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AppEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyAppEntropy5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropyLZivComplexity5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -331,8 +346,22 @@ FeatureDefinitions:
           data_like: id.1
           dim: 'times'
 
+  LZiv:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyLZivComplexity5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+
   AntropyNumZeroCross5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -342,8 +371,22 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  NumZeroCross:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyNumZeroCross5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+
   AntropyPermutationEntropy5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -353,8 +396,21 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  PermEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyPermutationEntropy5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropySampleEntropy5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -364,8 +420,21 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  SampleEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropySampleEntropy5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropySpectralEntropy5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -376,8 +445,21 @@ FeatureDefinitions:
           dim: 'times'
           sf: 200.0
 
+  SpectralEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropySpectralEntropy5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropySVDEntropy5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -387,8 +469,21 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  SVDEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropySVDEntropy5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropyHiguchiFD5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -398,8 +493,21 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  HiguchiFD:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyHiguchiFD5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropyKatzFD5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -409,8 +517,21 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  KatzFD:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyKatzFD5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropyPetrosianFD5seg:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep5seg.fif
@@ -420,8 +541,21 @@ FeatureDefinitions:
           data_like: id.0
           dim: 'times'
 
+  PetrosianFD:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyPetrosianFD5seg.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
   AntropyDetrendedFluctuation10min:
     overwrite: False
+    for_dataframe: False
     nodes:
       - id: 0
         feature: BasicPrep10min.fif
@@ -430,6 +564,18 @@ FeatureDefinitions:
         args:
           data_like: id.0
           dim: 'times'
+
+  DetrendedFluctuation:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyDetrendedFluctuation10min.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
 
   NeurokitComplexityDelay:
     overwrite: False
@@ -442,6 +588,18 @@ FeatureDefinitions:
         args:
           data_like: id.0
           dim: 'times'
+
+  ComplexityDelay:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: NeurokitComplexityDelay.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
 
 FeatureList:
   - BasicPrep5seg
@@ -466,9 +624,17 @@ FeatureList:
   - AntropyPermutationEntropy5seg
 #  - AntropySampleEntropy5seg
   - AntropySpectralEntropy5seg
+  - SpectralEntropy
   - AntropySVDEntropy5seg
+  - SVDEntropy
   - AntropyHiguchiFD5seg
+  - HiguchiFD
   - AntropyKatzFD5seg
+  - KatzFD
   - AntropyPetrosianFD5seg
+  - PetrosianFD
   - AntropyDetrendedFluctuation10min
+  - DetrendedFluctuation
   #- NeurokitComplexityDelay
+  # - ComplexityDelay
+  - AntropyHjorthParams5seg
