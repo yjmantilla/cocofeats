@@ -73,7 +73,7 @@ def iterate_feature_pipeline(
             log.warning("Missing indices will be ignored.", missing_indices=list(set(only_index if isinstance(only_index, list) else [only_index]) - set([item[0] for item in all_files])))
             log.warning("Proceeding with available indices.")
 
-
+    # TODO: applying max_files after only_index, not sure about it though, maybe they should be incompatible
     # now apply max_files_per_dataset if specified
     if max_files_per_dataset is not None:
         filtered_files = []
