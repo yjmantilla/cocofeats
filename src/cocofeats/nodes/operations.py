@@ -59,6 +59,11 @@ def mean_across_dimension(xarray_data, dim):
     import xarray as xr
     import numpy as np
 
+    if isinstance(xarray_data, (str, os.PathLike)):
+        xarray_data = xr.open_dataarray(xarray_data)
+        log.debug("Loaded xarray DataArray from file", input=xarray_data)
+
+
     if not isinstance(xarray_data, xr.DataArray):
         raise ValueError("Input must be an xarray DataArray.")
 
