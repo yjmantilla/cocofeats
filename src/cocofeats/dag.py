@@ -195,6 +195,11 @@ def register_features_from_yaml(yaml_path: str) -> list[str]:
 def _artifact_candidates_for(prefix: str) -> list[str]:
     return sorted(glob.glob(prefix + ".*"))
 
+
+class _MissingPrecomputedArtifacts(RuntimeError):
+    """Raised when dataframe-only collection requires cached artifacts but none are available."""
+
+
 def _split_feature_ref(feature_ref: str) -> tuple[str, str | None]:
     if "." in feature_ref:
         base, ext = feature_ref.split(".", 1)
@@ -483,16 +488,34 @@ def collect_feature_for_dataframe(
 
     Returns a dictionary suitable for composing a DataFrame row, with columns named
     ``{feature_name}{artifact_suffix}`` (with optional BIDS-like suffixes per flattened element).
+    Features flagged with ``save=True`` and ``for_dataframe=True`` are skipped when no cached
+    artifacts are found instead of triggering a recomputation.
     """
 
-    artifact_payloads = _resolve_feature_artifacts(
-        feature_def,
-        feature_name,
-        file_path,
-        reference_base,
-        dataset_config=dataset_config,
-        mount_point=mount_point,
+    enforce_precomputed = bool(feature_def.get("save", True)) and bool(
+        feature_def.get("for_dataframe", True)
     )
+
+    try:
+        artifact_payloads = _resolve_feature_artifacts(
+            feature_def,
+            feature_name,
+            file_path,
+            reference_base,
+            dataset_config=dataset_config,
+            mount_point=mount_point,
+            precomputed_only=enforce_precomputed,
+        )
+    except _MissingPrecomputedArtifacts:
+        log.debug(
+            "Skipping feature during dataframe collection because cached artifacts are missing",
+            feature=feature_name,
+            file=file_path,
+            reference_base=reference_base.as_posix()
+            if isinstance(reference_base, Path)
+            else reference_base,
+        )
+        return {}
 
     row_values: dict[str, Any] = {}
     for suffix, payload in artifact_payloads.items():
@@ -528,6 +551,8 @@ def _resolve_feature_artifacts(
     reference_base: Path,
     dataset_config: Any = None,
     mount_point: Path | None = None,
+    *,
+    precomputed_only: bool = False,
 ) -> dict[str, Any]:
     save = bool(feature_def.get("save", True))
     base_reference = reference_base.as_posix() if isinstance(reference_base, Path) else reference_base
@@ -541,6 +566,10 @@ def _resolve_feature_artifacts(
                 suffix = path[len(prefix) :]
                 payloads[suffix] = Path(path)
             return payloads
+        if precomputed_only:
+            raise _MissingPrecomputedArtifacts(
+                f"Cached artifacts not found for feature '{feature_name}' with prefix '{prefix}'"
+            )
 
     result = run_feature(
         feature_def,
