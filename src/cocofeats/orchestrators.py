@@ -60,6 +60,20 @@ def iterate_feature_pipeline(
         pipeline_configuration, max_files_per_dataset=None #max_files_per_dataset, to obtain all files and then filter by only_index
     )
 
+
+    
+
+    log.info("iterate_call_pipeline: starting processing", total_files=len(all_files))
+
+    dry_run_collection = []
+    if only_index is not None:
+        all_files = [item for item in all_files if item[0] in (only_index if isinstance(only_index, list) else [only_index])]
+        if len(all_files) != len(only_index if isinstance(only_index, list) else [only_index]):
+            log.warning("Some specified indices in only_index were not found in the files to process.", requested_indices=only_index, found_indices=[item[0] for item in all_files])
+            log.warning("Missing indices will be ignored.", missing_indices=list(set(only_index if isinstance(only_index, list) else [only_index]) - set([item[0] for item in all_files])))
+            log.warning("Proceeding with available indices.")
+
+
     # now apply max_files_per_dataset if specified
     if max_files_per_dataset is not None:
         filtered_files = []
@@ -71,16 +85,6 @@ def iterate_feature_pipeline(
                 dataset_file_count[dataset_name] += 1
         all_files = filtered_files
         log.debug("iterate_call_pipeline: applied max_files_per_dataset filter", max_files_per_dataset=max_files_per_dataset, total_files=len(all_files), per_dataset=dataset_file_count)
-
-    log.info("iterate_call_pipeline: starting processing", total_files=len(all_files))
-
-    dry_run_collection = []
-    if only_index is not None:
-        all_files = [item for item in all_files if item[0] in (only_index if isinstance(only_index, list) else [only_index])]
-        if len(all_files) != len(only_index if isinstance(only_index, list) else [only_index]):
-            log.warning("Some specified indices in only_index were not found in the files to process.", requested_indices=only_index, found_indices=[item[0] for item in all_files])
-            log.warning("Missing indices will be ignored.", missing_indices=list(set(only_index if isinstance(only_index, list) else [only_index]) - set([item[0] for item in all_files])))
-            log.warning("Proceeding with available indices.")
 
     feature_entry = None
     node_callable: Callable | None = None
