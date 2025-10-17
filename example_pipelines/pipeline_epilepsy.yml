@@ -46,8 +46,28 @@ FeatureDefinitions:
         args:
           mne_object: id.0
 
+  SpectrumArrayMultitaper:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: mne_spectrum_array
+        args:
+          meeg: id.0
+          method: 'multitaper'
+          method_kwargs:
+            bandwidth : null
+            adaptive: False
+            low_bias: True
+            normalization: 'length'
+            remove_dc: True
+            output: 'power'
+
 
 FeatureList:
   - Mat2fif
   - BasicPrep
   - AmpNorm
+  - SpectrumArrayMultitaper
