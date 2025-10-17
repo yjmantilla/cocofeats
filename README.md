@@ -67,6 +67,18 @@ FeatureDefinitions:
 
 Relative paths are resolved from the pipeline YAML location. Each module is executed once and may call `@register_node` as part of its import.
 
+## Parallel execution
+
+`iterate_feature_pipeline` can fan out across files using joblib. You can enable it either by passing `n_jobs` (and optionally `joblib_backend` / `joblib_prefer`) when calling the orchestrator or by adding the keys to your pipeline YAML:
+
+```yaml
+n_jobs: 4           # -1 to use all cores, 1 or null keeps it serial
+joblib_backend: loky
+joblib_prefer: processes
+```
+
+The CLI mirrors these options via `--n-jobs`, `--joblib-backend`, and `--joblib-prefer`.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
