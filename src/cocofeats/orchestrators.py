@@ -23,7 +23,7 @@ import pandas as pd
 log = get_logger(__name__)
 
 
-@dataclass(slots=True)
+@dataclass(slots=False) # slots=True seems to break parallelization
 class _FileJob:
     index: int
     dataset: str
