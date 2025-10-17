@@ -9,6 +9,7 @@ from cocofeats.iterators import get_all_files_from_pipeline_configuration
 from cocofeats.loggers import get_logger
 from cocofeats.utils import get_path
 from cocofeats.nodes import get_node, list_nodes
+from cocofeats.nodes.loader import load_node_definitions
 from cocofeats.features import get_feature, list_features
 from cocofeats.dag import collect_feature_for_dataframe, run_feature
 from cocofeats.loaders import load_configuration
@@ -46,7 +47,19 @@ def iterate_feature_pipeline(
     log.debug("iterate_call_pipeline: called", pipeline_configuration=pipeline_configuration)
 
 
-    config_dict = load_configuration(pipeline_configuration) if isinstance(pipeline_configuration, str) else pipeline_configuration
+    is_path_like = isinstance(pipeline_configuration, (str, os.PathLike))
+    config_dict = load_configuration(pipeline_configuration) if is_path_like else pipeline_configuration
+
+    new_definitions = config_dict.get("new_definitions")
+    if new_definitions:
+        if isinstance(new_definitions, (str, os.PathLike)):
+            definition_paths = [new_definitions]
+        elif isinstance(new_definitions, (list, tuple, set)):
+            definition_paths = list(new_definitions)
+        else:
+            raise TypeError("new_definitions must be a string or list of paths")
+        base_dir = Path(pipeline_configuration).resolve().parent if is_path_like else Path.cwd()
+        load_node_definitions(definition_paths, base_dir=base_dir)
 
     if "FeatureDefinitions" in config_dict:
         register_features_from_dict(config_dict)

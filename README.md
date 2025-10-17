@@ -48,6 +48,25 @@ rm -rf docs/_build
 - Hosted docs: configure GitHub Pages and set the URL in `pyproject.toml` under `[project.urls]`.
 - [Docs](https://yjmantilla.github.io/cocofeats/)
 
+## Custom node definitions
+
+Pipelines can import additional node definitions before registering features by pointing `new_definitions` to one or more Python files:
+
+```yaml
+datasets: example_pipelines/datasets_epilepsy.yml
+mount_point: local
+new_definitions:
+  - custom_nodes/artifacts.py
+  - /abs/path/to/local_nodes.py
+FeatureDefinitions:
+  MyCustomFeature:
+    nodes:
+      - id: 0
+        node: my_custom_node  # registered inside the imported modules
+```
+
+Relative paths are resolved from the pipeline YAML location. Each module is executed once and may call `@register_node` as part of its import.
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
