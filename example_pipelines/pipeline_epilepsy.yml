@@ -28,19 +28,26 @@ FeatureDefinitions:
           notch_filter: null
           filter_args:
             l_freq: 0.5
-            h_freq: 150
+            h_freq: 110
           epoch_config:
             duration: 1
             overlap: 0.5
             reject_by_annotation : False
             proj : False
           extra_artifacts: True
-      - id: 2
+  AmpNorm:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: BasicPrep.fif
+      - id: 1
         node: amplitude_normalization_per_segment
         args:
-          mne_object: id.1
+          mne_object: id.0
 
 
 FeatureList:
   - Mat2fif
   - BasicPrep
+  - AmpNorm
