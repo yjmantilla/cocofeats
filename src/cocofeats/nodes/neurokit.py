@@ -45,7 +45,7 @@ FigureEncoding = str | None
 CallableLike = Callable[[np.ndarray], Any]
 
 
-@dataclass(slots=True)
+@dataclass(slots=False) # breaks parallelization?
 class _CallRecord:
     metadata: Any | None
     figure: dict[str, np.ndarray] | None

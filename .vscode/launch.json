@@ -37,7 +37,8 @@
         "/home/user/code/cocofeats/example_pipelines/pipeline_epilepsy.yml",
         //"--max_files_per_dataset", "5",
         //  "--dry_run",
-        // "--only_index", "0", "3"
+        // "--only_index", "0", "3",
+        //"--n-jobs", "2",
       ],
     },
 
