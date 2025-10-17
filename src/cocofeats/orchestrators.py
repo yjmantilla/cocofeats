@@ -40,7 +40,7 @@ class _FileJob:
     custom_node_paths: tuple[str, ...] = ()
 
 
-@dataclass(slots=True)
+@dataclass(slots=False) # break parallelization?
 class _FileResult:
     index: int
     dataset: str
@@ -336,7 +336,11 @@ def iterate_feature_pipeline(
 
     parallel_results: list[_FileResult]
     if effective_n_jobs in (None, 1):
-        parallel_results = [_process_file_job(job) for job in jobs]
+        parallel_results = []
+        for job in jobs:
+            result = _process_file_job(job)
+            parallel_results.append(result)
+        # parallel_results = [_process_file_job(job) for job in jobs]
     else:
         parallel_kwargs = {"n_jobs": effective_n_jobs}
         if backend is not None:
