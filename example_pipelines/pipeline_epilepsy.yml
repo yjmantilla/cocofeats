@@ -66,8 +66,32 @@ FeatureDefinitions:
             output: 'power'
 
 
+  BandPower:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: SpectrumArrayMultitaper.fif
+      - id: 1
+        node: extract_data_var
+        args:
+          dataset_like: id.0
+          data_var: 'spectrum'
+      - id: 2
+        node: bandpower
+        args:
+          bands:
+            hfo : (70.0, 110.0)
+            delta: (1.0, 4.0)
+            theta: (4.0, 8.0)
+            alpha: (8.0, 13.0)
+            beta: (13.0, 30.0)
+            preAlpha: (5.5, 8.0)
+            slowTheta: (4.0, 5.5)
+
 FeatureList:
   - Mat2fif
   - BasicPrep
   - AmpNorm
   - SpectrumArrayMultitaper
+  - BandPower

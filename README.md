@@ -79,6 +79,14 @@ joblib_prefer: processes
 
 The CLI mirrors these options via `--n-jobs`, `--joblib-backend`, and `--joblib-prefer`.
 
+## Visualization
+
+You can visualize `.fif` or `.nc` files using the built-in visualization tool:
+
+```bash
+python -m cocofeats.visualization path/to/your_file.fif
+```
+
 ## Contributing
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md).
