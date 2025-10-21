@@ -89,9 +89,281 @@ FeatureDefinitions:
             preAlpha: (5.5, 8.0)
             slowTheta: (4.0, 5.5)
 
+
+  AntropyHjorthParams:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_hjorth_params
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AntropyAppEntropy:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_app_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  AppEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyAppEntropy.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+  AntropyLZivComplexity:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: binarize_with_median
+        args:
+          data: id.0
+          dim: 'times'
+      - id: 2
+        node: antropy_lziv_complexity
+        args:
+          data_like: id.1
+          dim: 'times'
+
+  LZiv:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyLZivComplexity.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+
+  AntropyNumZeroCross:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_num_zerocross
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  NumZeroCross:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyNumZeroCross.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+
+  AntropyPermutationEntropy:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_perm_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  PermEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyPermutationEntropy.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+  AntropySampleEntropy:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_sample_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  SampleEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropySampleEntropy.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+  AntropySpectralEntropy:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_spectral_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+          sf: 200.0
+
+  SpectralEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropySpectralEntropy.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+  AntropySVDEntropy:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_svd_entropy
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  SVDEntropy:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropySVDEntropy.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+  AntropyHiguchiFD:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_higuchi_fd
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  HiguchiFD:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyHiguchiFD.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+  AntropyKatzFD:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_katz_fd
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  KatzFD:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyKatzFD.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+  AntropyPetrosianFD:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: antropy_petrosian_fd
+        args:
+          data_like: id.0
+          dim: 'times'
+
+  PetrosianFD:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: AntropyPetrosianFD.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
 FeatureList:
   - Mat2fif
   - BasicPrep
   - AmpNorm
   - SpectrumArrayMultitaper
   - BandPower
+  - AntropyHjorthParams
+  - AppEntropy
+  - LZiv
+  - NumZeroCross
+  #- PermEntropy
+  #- SampleEntropy
+  - SpectralEntropy
+  - SVDEntropy
+  - HiguchiFD
+  - KatzFD
+  - PetrosianFD
