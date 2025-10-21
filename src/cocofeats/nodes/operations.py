@@ -31,13 +31,22 @@ def binarize_with_median(data: xr.DataArray, dim: str) -> xr.DataArray:
     xr.DataArray
         A binarized xarray DataArray where values above the median are 1 and others are 0.
     """
+
+    if isinstance(data, (str, os.PathLike)):
+        try:
+            data = xr.open_dataarray(data)
+            log.debug("Loaded xarray DataArray from file", input=data)
+        except Exception as e:
+            log.error("Failed to load xarray DataArray from file", input=data, error=e)
+            raise ValueError("Failed to load xarray DataArray from file")
+
     if not isinstance(data, xr.DataArray):
         raise ValueError("Input must be an xarray DataArray.")
 
     median_values = data.median(dim=dim, keep_attrs=True)
     binarized_data = (data > median_values).astype(int)
 
-    return binarized_data
+    return NodeResult(artifacts={".nc": Artifact(item=binarized_data, writer=lambda path: binarized_data.to_netcdf(path))})
 
 @register_node(name="mean_across_dimension", override=True)
 def mean_across_dimension(xarray_data, dim):
