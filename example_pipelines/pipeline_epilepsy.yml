@@ -71,7 +71,7 @@ FeatureDefinitions:
     for_dataframe: False
     nodes:
       - id: 0
-        feature: SpectrumArrayMultitaper.fif
+        feature: SpectrumArrayMultitaper.nc
       - id: 1
         node: extract_data_var
         args:
@@ -80,14 +80,15 @@ FeatureDefinitions:
       - id: 2
         node: bandpower
         args:
+          psd_like: id.1
           bands:
-            hfo : (70.0, 110.0)
-            delta: (1.0, 4.0)
-            theta: (4.0, 8.0)
-            alpha: (8.0, 13.0)
-            beta: (13.0, 30.0)
-            preAlpha: (5.5, 8.0)
-            slowTheta: (4.0, 5.5)
+            hfo: [70.0, 110.0]
+            delta: [1.0, 4.0]
+            theta: [4.0, 8.0]
+            alpha: [8.0, 13.0]
+            beta: [13.0, 30.0]
+            preAlpha: [5.5, 8.0]
+            slowTheta: [4.0, 5.5]
 
 
   AntropyHjorthParams:
@@ -133,14 +134,18 @@ FeatureDefinitions:
       - id: 0
         feature: AmpNorm.fif
       - id: 1
+        node: meeg_to_xarray
+        args:
+          mne_object: id.0
+      - id: 2
         node: binarize_with_median
         args:
-          data: id.0
+          data: id.1
           dim: 'times'
-      - id: 2
+      - id: 3
         node: antropy_lziv_complexity
         args:
-          data_like: id.1
+          data_like: id.2
           dim: 'times'
 
   LZiv:
@@ -356,11 +361,11 @@ FeatureList:
   - AmpNorm
   - SpectrumArrayMultitaper
   - BandPower
+  - AntropyLZivComplexity
+  - LZiv
   - AntropyHjorthParams
   - AntropyAppEntropy
   - AppEntropy
-  - AntropyLZivComplexity
-  - LZiv
   - AntropyNumZeroCross
   - NumZeroCross
   - AntropyPermutationEntropy
