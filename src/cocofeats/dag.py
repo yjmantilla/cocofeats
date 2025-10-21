@@ -193,7 +193,8 @@ def register_features_from_yaml(yaml_path: str) -> list[str]:
 
 
 def _artifact_candidates_for(prefix: str) -> list[str]:
-    return sorted(glob.glob(prefix + ".*"))
+    #TODO: How to add option to skip features that previously failed? (.error files)
+    return [x for x in sorted(glob.glob(prefix + ".*")) if not x.endswith('.error')]
 
 
 class _MissingPrecomputedArtifacts(RuntimeError):
