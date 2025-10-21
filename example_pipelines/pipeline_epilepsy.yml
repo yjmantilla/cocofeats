@@ -357,13 +357,23 @@ FeatureList:
   - SpectrumArrayMultitaper
   - BandPower
   - AntropyHjorthParams
+  - AntropyAppEntropy
   - AppEntropy
+  - AntropyLZivComplexity
   - LZiv
+  - AntropyNumZeroCross
   - NumZeroCross
-  #- PermEntropy
-  #- SampleEntropy
+  - AntropyPermutationEntropy
+  - PermEntropy
+  - AntropySampleEntropy
+  - SampleEntropy
+  - AntropySpectralEntropy
   - SpectralEntropy
+  - AntropySVDEntropy
   - SVDEntropy
+  - AntropyHiguchiFD
   - HiguchiFD
+  - AntropyKatzFD
   - KatzFD
+  - AntropyPetrosianFD
   - PetrosianFD
