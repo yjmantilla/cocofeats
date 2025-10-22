@@ -66,6 +66,29 @@ FeatureDefinitions:
             output: 'power'
 
 
+  FooofArray:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: SpectrumArrayMultitaper.nc
+      - id: 1
+        node: fooof
+        args:
+          psd_like: id.0
+          freq_dim: 'frequencies'
+          fooof_options:
+            FOOOF:
+              aperiodic_mode: 'knee'
+            fit:
+              freq_range: [1, 90]
+            freq_res: 1
+            save:
+              save_results: True
+              save_settings: True
+              save_data: True
+          include_timings: True
+
   BandPower:
     overwrite: False
     for_dataframe: False
@@ -382,3 +405,4 @@ FeatureList:
   - KatzFD
   - AntropyPetrosianFD
   - PetrosianFD
+  - FooofArray
