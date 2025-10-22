@@ -289,7 +289,14 @@ def iterate_feature_pipeline(
         raise TypeError(
             "feature must be a registered feature name, node name, FeatureEntry, or callable node"
         )
-
+    # skip save=False features
+    if 'save' in feature_entry.definition:
+        if feature_entry.definition['save'] is False:
+            log.info(
+                "Feature is marked with save=False; skipping execution.",
+                feature=feature_label
+            )
+            return None
     effective_n_jobs = n_jobs if n_jobs is not None else config_dict.get("n_jobs")
     if isinstance(effective_n_jobs, str):
         try:
@@ -579,9 +586,13 @@ if __name__ == "__main__":
         log.error("No features specified in the pipeline configuration under 'FeatureList'. Exiting.")
         exit(1)
 
+    if args.dry_run:
+        log.info("Performing dry run of feature pipeline", features=feature_list)
+        dry_run_results = []
+
     if not args.make_final_dataframe:  # and args.dataframe_output:
         for feature in feature_list:
-            iterate_feature_pipeline(
+            output = iterate_feature_pipeline(
                 pipeline_configuration=pipeline_configuration,
                 feature=feature,
                 max_files_per_dataset=args.max_files_per_dataset,
@@ -592,6 +603,40 @@ if __name__ == "__main__":
                 joblib_backend=args.joblib_backend,
                 joblib_prefer=args.joblib_prefer,
             )
+            if args.dry_run and output is not None:
+                dry_run_results.append((feature, output))
+        if args.dry_run:
+            # merge dry run results
+            # simple concatenation for now
+            dry_run_results = [x for x in dry_run_results if x is not None]
+            df = pd.concat([result for _, result in dry_run_results], ignore_index=True)
+            # save
+            if args.dataframe_output:
+                output_path = Path(args.dataframe_output)
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                if output_path.suffix.lower() == ".parquet":
+                    try:
+                        df.to_parquet(output_path, index=False)
+                    except (ImportError, ValueError) as parquet_error:
+                        log.warning(
+                            "Parquet export failed; saving as CSV instead.",
+                            path=str(output_path),
+                            error=str(parquet_error),
+                        )
+                        csv_fallback = output_path.with_suffix(".csv")
+                        df.to_csv(csv_fallback, index=False)
+                        log.info("Saved dry run results", path=str(csv_fallback), rows=len(df), columns=list(df.columns))
+                    else:
+                        log.info("Saved dry run results", path=str(output_path), rows=len(df), columns=list(df.columns))
+                else:
+                    df.to_csv(output_path, index=False)
+                    log.info("Saved dry run results", path=str(output_path), rows=len(df), columns=list(df.columns))
+            else:
+                df.to_csv("dry_run_results.csv", index=False)
+                log.info("Saved dry run results to dry_run_results.csv", rows=len(df), columns=list(df.columns))
+            log.info("Dry run completed", total_rows=len(df))
+            
+
 
     if args.make_final_dataframe:
         log.info("Building feature dataframe", features=args.dataframe_features)
