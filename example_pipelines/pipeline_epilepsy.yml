@@ -378,7 +378,42 @@ FeatureDefinitions:
           xarray_data: id.0
           dim: 'epochs'
 
+
+  NeurokitEntropyMultiscale:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        feature: AmpNorm.fif
+      - id: 1
+        node: neurokit_entropy_multiscale
+        args:
+          data_like: id.0
+          dim: 'times'
+          function_kwargs:
+            scale: 'default'
+            dimension: 2
+            r: 'default'
+            composite: False
+            refined: False
+            fuzzy: False
+
+  EntropyMultiscale:
+    overwrite: False
+    save: False
+    nodes:
+      - id: 0
+        feature: NeurokitEntropyMultiscale.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
+
+
 FeatureList:
+  - NeurokitEntropyMultiscale
+  - EntropyMultiscale
   - Mat2fif
   - BasicPrep
   - AmpNorm

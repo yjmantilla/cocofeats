@@ -365,6 +365,7 @@ def _build_node(name: str, func: CallableLike) -> None:
 
 _NEUROKIT_FUNCTIONS: Mapping[str, CallableLike] = {
     "neurokit_complexity_delay": nk.complexity_delay,
+    "neurokit_entropy_multiscale": nk.entropy_multiscale,
 }
 
 
