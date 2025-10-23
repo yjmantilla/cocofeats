@@ -412,8 +412,6 @@ FeatureDefinitions:
 
 
 FeatureList:
-  - NeurokitEntropyMultiscale
-  - EntropyMultiscale
   - Mat2fif
   - BasicPrep
   - AmpNorm
@@ -441,3 +439,5 @@ FeatureList:
   - AntropyPetrosianFD
   - PetrosianFD
   - FooofArray
+  - NeurokitEntropyMultiscale
+  - EntropyMultiscale
