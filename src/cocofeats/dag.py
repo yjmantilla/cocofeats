@@ -470,6 +470,7 @@ def collect_feature_for_dataframe(
     *,
     flatten_xarray_artifacts: bool = True,
     sort_flattened_dims: bool = True,
+    preserve_complex_values: bool = False,
 ) -> dict[str, Any]:
     """
     Collect artifacts for a feature and convert them into dataframe-ready values.
@@ -486,6 +487,10 @@ def collect_feature_for_dataframe(
     sort_flattened_dims:
         When flattening a ``DataArray``, sort dimension names alphanumerically when constructing
         the column suffix.
+
+    preserve_complex_values:
+        When True, skip flattening and value simplification so artifacts retain their original
+        Python objects (after potential on-disk loading).
 
     Returns a dictionary suitable for composing a DataFrame row, with columns named
     ``{feature_name}{artifact_suffix}`` (with optional BIDS-like suffixes per flattened element).
@@ -524,8 +529,9 @@ def collect_feature_for_dataframe(
         simplified = _simplify_artifact_payload(
             payload,
             suffix=suffix,
-            flatten_xarray=flatten_xarray_artifacts,
+            flatten_xarray=flatten_xarray_artifacts and not preserve_complex_values,
             sort_dims_alphabetically=sort_flattened_dims,
+            preserve_complex_values=preserve_complex_values,
         )
         if isinstance(simplified, _FlattenedArtifactColumns):
             for flatten_suffix, value in simplified.items():
@@ -608,8 +614,12 @@ def _simplify_artifact_payload(
     suffix: str,
     flatten_xarray: bool = False,
     sort_dims_alphabetically: bool = True,
+    preserve_complex_values: bool = False,
 ) -> Any:
     value = _load_from_path(payload, suffix=suffix) if isinstance(payload, Path) else payload
+
+    if preserve_complex_values:
+        return value
 
     if flatten_xarray and xr is not None and isinstance(value, xr.DataArray):
         return _flatten_dataarray_payload(

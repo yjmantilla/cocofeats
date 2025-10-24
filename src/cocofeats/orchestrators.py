@@ -4,7 +4,7 @@ import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Literal
 
 from joblib import Parallel, delayed
 
@@ -20,6 +20,7 @@ from cocofeats.loaders import load_configuration
 from cocofeats.features.pipeline import register_features_from_dict
 from cocofeats.definitions import DatasetConfig
 import pandas as pd
+
 log = get_logger(__name__)
 
 
@@ -413,6 +414,8 @@ def build_feature_dataframe(
     include_features: List[str] | None = None,
     max_files_per_dataset: int | None = None,
     only_index: int | List[int] | None = None,
+    output_format: Literal["wide", "long"] = "wide",
+    preserve_complex_values: bool = False,
     raise_on_error: bool = False,
 ) -> pd.DataFrame:
     """
@@ -428,6 +431,12 @@ def build_feature_dataframe(
         Limit the number of files processed per dataset.
     only_index : int | list[int], optional
         Restrict collection to specific indices (matching iterate_feature_pipeline behaviour).
+    output_format : {"wide", "long"}, optional
+        Shape of the returned dataframe. ``"wide"`` retains one row per file with feature columns,
+        while ``"long"`` melts feature columns into ``feature``/``value`` pairs.
+    preserve_complex_values : bool, optional
+        When True, feature artifacts keep their original (potentially nested) Python structures
+        instead of being flattened or coerced into simple dataframe columns.
     raise_on_error : bool, optional
         Re-raise exceptions encountered while collecting features; defaults to False.
 
@@ -507,6 +516,8 @@ def build_feature_dataframe(
                             reference_base=reference_base,
                             dataset_config=dataset_config,
                             mount_point=mount_point,
+                            preserve_complex_values=preserve_complex_values,
+                            flatten_xarray_artifacts=not preserve_complex_values,
                         )
                     )
                 except Exception as feature_error:
@@ -542,7 +553,26 @@ def build_feature_dataframe(
             if raise_on_error:
                 raise
 
-    return pd.DataFrame(rows)
+    if output_format not in {"wide", "long"}:
+        raise ValueError(f"Unsupported output_format '{output_format}'. Expected 'wide' or 'long'.")
+
+    dataframe = pd.DataFrame(rows)
+
+    if output_format == "long":
+        if dataframe.empty:
+            return pd.DataFrame(columns=["index", "dataset", "file_path", "feature", "value"])
+        id_vars = [column for column in ("index", "dataset", "file_path") if column in dataframe.columns]
+        value_vars = [column for column in dataframe.columns if column not in id_vars]
+        if not value_vars:
+            return pd.DataFrame(columns=[*id_vars, "feature", "value"])
+        dataframe = dataframe.melt(
+            id_vars=id_vars,
+            value_vars=value_vars,
+            var_name="feature",
+            value_name="value",
+        )
+
+    return dataframe
 
 
 def _build_reference_base(
@@ -575,6 +605,17 @@ if __name__ == "__main__":
         nargs="*",
         default=None,
         help="Optional subset of feature names to include when building the dataframe.",
+    )
+    parser.add_argument(
+        "--dataframe_format",
+        choices=("wide", "long"),
+        default="wide",
+        help="Layout of the generated dataframe; 'long' melts feature columns into feature/value rows.",
+    )
+    parser.add_argument(
+        "--preserve_complex_values",
+        action="store_true",
+        help="Retain complex feature artifacts without flattening or converting them for dataframe storage.",
     )
     args = parser.parse_args()
 
@@ -645,6 +686,8 @@ if __name__ == "__main__":
             include_features=args.dataframe_features,
             max_files_per_dataset=args.max_files_per_dataset,
             only_index=args.only_index,
+            output_format=args.dataframe_format,
+            preserve_complex_values=args.preserve_complex_values,
             raise_on_error=True if args.raise_on_error else False,
         )
         if args.dataframe_output:
