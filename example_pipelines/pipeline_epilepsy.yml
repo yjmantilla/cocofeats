@@ -405,9 +405,14 @@ FeatureDefinitions:
       - id: 0
         feature: NeurokitEntropyMultiscale.nc
       - id: 1
+        node: extract_data_var
+        args:
+          dataset_like: id.0
+          data_var: 'value'
+      - id: 2
         node: mean_across_dimension
         args:
-          xarray_data: id.0
+          xarray_data: id.1
           dim: 'epochs'
 
 
@@ -415,6 +420,8 @@ FeatureList:
   - Mat2fif
   - BasicPrep
   - AmpNorm
+  - NeurokitEntropyMultiscale
+  - EntropyMultiscale
   - SpectrumArrayMultitaper
   - BandPower
   - AntropyLZivComplexity
@@ -439,5 +446,3 @@ FeatureList:
   - AntropyPetrosianFD
   - PetrosianFD
   - FooofArray
-  - NeurokitEntropyMultiscale
-  - EntropyMultiscale
