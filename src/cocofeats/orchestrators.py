@@ -480,9 +480,15 @@ def build_feature_dataframe(
         pipeline_configuration
     )
 
-    files_per_dataset, all_files, common_roots = get_all_files_from_pipeline_configuration(
+    _, _, common_roots = get_all_files_from_pipeline_configuration(
+        pipeline_configuration, max_files_per_dataset=None
+    )
+
+    files_per_dataset, all_files, _ = get_all_files_from_pipeline_configuration(
         pipeline_configuration, max_files_per_dataset=max_files_per_dataset
     )
+
+
     log.debug("build_feature_dataframe: enumerated files", total_files=len(all_files), per_dataset=files_per_dataset)
 
     if only_index is not None:
