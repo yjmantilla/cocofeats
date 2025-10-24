@@ -322,8 +322,8 @@ def _build_node(name: str, func: CallableLike) -> None:
         resolved_args = tuple(function_args or ())
 
         capture_requested = figure_encoding not in {None, "none", ""}
-        if capture_requested and "show" not in resolved_kwargs:
-            resolved_kwargs["show"] = True
+        #if capture_requested and "show" not in resolved_kwargs:
+        #    resolved_kwargs["show"] = True
         if force_show is not None:
             resolved_kwargs["show"] = bool(force_show)
 
