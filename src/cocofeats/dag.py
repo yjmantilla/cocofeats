@@ -739,11 +739,13 @@ def _format_coord_value(value: Any) -> str:
     text = "NA" if value is None else str(value)
     #sanitized = re.sub(r"[^0-9A-Za-z\-.@~$]+", "-", text)
     #sanitized = sanitized.strip("-")
+    value = str(value)
 
-    value = value.replace('-', '~')
-    value = value.replace('_', '|')
-    value = value.replace('@', '$')
-    value = value.replace(',', '.')
+    if isinstance(value, str):
+        value = value.replace('-', '~')
+        value = value.replace('_', '|')
+        value = value.replace('@', '$')
+        value = value.replace(',', '.')
     sanitized = value
 
     return sanitized or "NA"
