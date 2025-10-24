@@ -72,7 +72,7 @@
         "--make_final_dataframe",
         "--dataframe_output", "${workspaceFolder}/outputs/epilepsy_features.csv",
         //"--dataframe_features", "FooofScalarsAllSpectrumArrayWelchEpochsAverage5seg",
-        //"--max_files_per_dataset", "2"
+        "--max_files_per_dataset", "2",
         "--dataframe_format","long"
       ],
     }
