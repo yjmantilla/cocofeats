@@ -60,7 +60,9 @@
       ],
     },
 
-        {
+    // Equivalent line:
+    // python src/cocofeats/orchestrators.py /home/yorguin/code/cocofeats/example_pipelines/pipeline_epilepsy.yml --make_final_dataframe --dataframe_output outputs/epilepsy_features.csv --dataframe_format long --max_files_per_dataset 5 
+    {
       "name": "Python: build_feature_dataframe epilepsy",
       "type": "debugpy",
       "request": "launch",
