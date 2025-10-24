@@ -91,7 +91,7 @@ FeatureDefinitions:
 
   BandPower:
     overwrite: False
-    for_dataframe: False
+    for_dataframe: True
     nodes:
       - id: 0
         feature: SpectrumArrayMultitaper.nc
