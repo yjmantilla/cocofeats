@@ -433,7 +433,7 @@ def build_feature_dataframe(
         Restrict collection to specific indices (matching iterate_feature_pipeline behaviour).
     output_format : {"wide", "long"}, optional
         Shape of the returned dataframe. ``"wide"`` retains one row per file with feature columns,
-        while ``"long"`` melts feature columns into ``feature``/``value`` pairs.
+        while ``"long"`` yields one row per collected feature value without synthesising missing columns.
     preserve_complex_values : bool, optional
         When True, feature artifacts keep their original (potentially nested) Python structures
         instead of being flattened or coerced into simple dataframe columns.
@@ -500,7 +500,13 @@ def build_feature_dataframe(
             log.warning("Some indices requested for dataframe collection were not found.", requested=index_filter, missing=missing)
         all_files = filtered
 
+    if output_format not in {"wide", "long"}:
+        raise ValueError(f"Unsupported output_format '{output_format}'. Expected 'wide' or 'long'.")
+
+    collect_long_rows = output_format == "long"
+
     rows: list[dict[str, Any]] = []
+    long_rows: list[dict[str, Any]] = []
     for index, dataset_name, file_path in all_files:
         try:
             dataset_config = datasets_configs[dataset_name]
@@ -514,18 +520,29 @@ def build_feature_dataframe(
             for feature_name in selected_features:
                 feature_def = feature_definitions.get(feature_name, {}) or {}
                 try:
-                    row.update(
-                        collect_feature_for_dataframe(
-                            feature_def,
-                            feature_name,
-                            file_path,
-                            reference_base=reference_base,
-                            dataset_config=dataset_config,
-                            mount_point=mount_point,
-                            preserve_complex_values=preserve_complex_values,
-                            flatten_xarray_artifacts=not preserve_complex_values,
-                        )
+                    feature_values = collect_feature_for_dataframe(
+                        feature_def,
+                        feature_name,
+                        file_path,
+                        reference_base=reference_base,
+                        dataset_config=dataset_config,
+                        mount_point=mount_point,
+                        preserve_complex_values=preserve_complex_values,
+                        flatten_xarray_artifacts=not preserve_complex_values,
                     )
+                    if feature_values:
+                        row.update(feature_values)
+                        if collect_long_rows:
+                            for column_name, value in feature_values.items():
+                                long_rows.append(
+                                    {
+                                        "index": index,
+                                        "dataset": dataset_name,
+                                        "file_path": file_path,
+                                        "feature": column_name,
+                                        "value": value,
+                                    }
+                                )
                 except Exception as feature_error:
                     log.error(
                         "Error collecting feature for dataframe",
@@ -539,6 +556,16 @@ def build_feature_dataframe(
                     if raise_on_error:
                         raise
                     row[f"{feature_name}__error"] = str(feature_error)
+                    if collect_long_rows:
+                        long_rows.append(
+                            {
+                                "index": index,
+                                "dataset": dataset_name,
+                                "file_path": file_path,
+                                "feature": f"{feature_name}__error",
+                                "value": str(feature_error),
+                            }
+                        )
             rows.append(row)
             log.debug(
                 "Collected dataframe row",
@@ -559,26 +586,12 @@ def build_feature_dataframe(
             if raise_on_error:
                 raise
 
-    if output_format not in {"wide", "long"}:
-        raise ValueError(f"Unsupported output_format '{output_format}'. Expected 'wide' or 'long'.")
-
-    dataframe = pd.DataFrame(rows)
-
     if output_format == "long":
-        if dataframe.empty:
+        if not long_rows:
             return pd.DataFrame(columns=["index", "dataset", "file_path", "feature", "value"])
-        id_vars = [column for column in ("index", "dataset", "file_path") if column in dataframe.columns]
-        value_vars = [column for column in dataframe.columns if column not in id_vars]
-        if not value_vars:
-            return pd.DataFrame(columns=[*id_vars, "feature", "value"])
-        dataframe = dataframe.melt(
-            id_vars=id_vars,
-            value_vars=value_vars,
-            var_name="feature",
-            value_name="value",
-        )
+        return pd.DataFrame(long_rows)
 
-    return dataframe
+    return pd.DataFrame(rows)
 
 
 def _build_reference_base(
@@ -616,7 +629,7 @@ if __name__ == "__main__":
         "--dataframe_format",
         choices=("wide", "long"),
         default="wide",
-        help="Layout of the generated dataframe; 'long' melts feature columns into feature/value rows.",
+        help="Layout of the generated dataframe; 'long' emits one row per collected feature value.",
     )
     parser.add_argument(
         "--preserve_complex_values",
