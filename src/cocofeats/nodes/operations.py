@@ -146,10 +146,12 @@ def slice_xarray(xarray_data, dim, start=None, end=None):
         The input xarray DataArray.
     dim : str
         The dimension name to slice.
-    start : int or None
-        The starting index for the slice (inclusive). If None, starts from the beginning.
-    end : int or None
-        The ending index for the slice (exclusive). If None, goes to the end.
+    start : int or hashable or None
+        The starting index/label for the slice. Indices use zero-based positions (inclusive)
+        while labels use coordinate values (inclusive). If None, starts from the beginning.
+    end : int or hashable or None
+        The ending index/label for the slice. Indices use zero-based positions (exclusive)
+        while labels use coordinate values (inclusive). If None, goes to the end.
 
     Returns
     -------
@@ -170,8 +172,30 @@ def slice_xarray(xarray_data, dim, start=None, end=None):
     if not isinstance(xarray_data, xr.DataArray):
         raise ValueError("Input must be an xarray DataArray.")
 
+    if dim not in xarray_data.dims:
+        raise ValueError(f"Dimension '{dim}' not found in the DataArray.")
+
+    def _is_index_like(value):
+        return value is None or isinstance(value, (int, np.integer))
+
     slicer = {dim: slice(start, end)}
-    sliced_data = xarray_data.isel(**slicer)
+
+    if _is_index_like(start) and _is_index_like(end):
+        sliced_data = xarray_data.isel(**slicer)
+    else:
+        if dim not in xarray_data.coords:
+            raise ValueError(
+                f"Dimension '{dim}' cannot be sliced by coordinate labels because it lacks coordinates."
+            )
+        try:
+            sliced_data = xarray_data.sel(**slicer)
+        except KeyError as exc:
+            raise ValueError(
+                f"Coordinate value(s) {start!r}, {end!r} not found along dimension '{dim}'."
+            ) from exc
+
+    if start == end or (dim in sliced_data.sizes and sliced_data.sizes[dim] == 1):
+        sliced_data = sliced_data.squeeze(dim=dim, drop=True)
 
     # return the new xarray in ncdf4 format
     artifacts = {".nc": Artifact(item=sliced_data, writer=lambda path: sliced_data.to_netcdf(path))}

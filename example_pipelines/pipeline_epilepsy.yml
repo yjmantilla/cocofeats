@@ -91,7 +91,7 @@ FeatureDefinitions:
 
   BandPower:
     overwrite: False
-    for_dataframe: True
+    for_dataframe: false
     nodes:
       - id: 0
         feature: SpectrumArrayMultitaper.nc
@@ -113,6 +113,18 @@ FeatureDefinitions:
             preAlpha: [5.5, 8.0]
             slowTheta: [4.0, 5.5]
 
+  BandPowerAverage:
+    overwrite: False
+    save: False
+    for_dataframe: True
+    nodes:
+      - id: 0
+        feature: BandPower.nc
+      - id: 1
+        node: mean_across_dimension
+        args:
+          xarray_data: id.0
+          dim: 'epochs'
 
   AntropyHjorthParams:
     overwrite: False
@@ -125,6 +137,47 @@ FeatureDefinitions:
         args:
           data_like: id.0
           dim: 'times'
+
+
+  Mobility:
+    overwrite: False
+    save: False
+    for_dataframe: True
+    nodes:
+      - id: 0
+        feature: AntropyHjorthParams.nc
+      - id: 1
+        node: slice_xarray
+        args:
+          xarray_data: id.0
+          dim: hjorthComponents
+          start: mobility
+          end: mobility
+      - id: 2
+        node: mean_across_dimension
+        args:
+          xarray_data: id.1
+          dim: 'epochs'
+
+  Complexity:
+    overwrite: False
+    save: False
+    for_dataframe: True
+    nodes:
+      - id: 0
+        feature: AntropyHjorthParams.nc
+      - id: 1
+        node: slice_xarray
+        args:
+          xarray_data: id.0
+          dim: hjorthComponents
+          start: complexity
+          end: complexity
+      - id: 2
+        node: mean_across_dimension
+        args:
+          xarray_data: id.1
+          dim: 'epochs'
 
   AntropyAppEntropy:
     overwrite: False
@@ -446,3 +499,6 @@ FeatureList:
   - AntropyPetrosianFD
   - PetrosianFD
   - FooofArray
+  - BandPowerAverage
+  - Mobility
+  - Complexity
