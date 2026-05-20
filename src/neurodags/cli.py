@@ -284,6 +284,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
         datasets_configuration=args.datasets,
         derivatives=derivatives,
         dry_run=True,
+        n_jobs=args.n_jobs,
     )
 
     if result is None or result.empty:
@@ -534,6 +535,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-missing",
         action="store_true",
         help="Print the file paths of missing (not yet computed) files below the summary table.",
+    )
+    status_parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=None,
+        help="Number of parallel workers for the underlying dry-run. Same semantics as 'run'.",
     )
 
     slurm_parser = subparsers.add_parser(
