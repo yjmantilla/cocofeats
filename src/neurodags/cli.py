@@ -252,6 +252,132 @@ EOF
     return submit, worker
 
 
+def _status_classify(plan: list) -> str:
+    """Return 'done', 'missing', 'errored', 'no-save', or 'unknown' from a dry-run plan list."""
+    if not isinstance(plan, list):
+        return "unknown"
+    final = next((s for s in plan if s.get("kind") == "derivative_output"), None)
+    if final is None:
+        return "unknown"
+    if final.get("has_error_marker"):
+        return "errored"
+    if not final.get("will_save", True):
+        return "no-save"
+    if final.get("cached"):
+        return "done"
+    return "missing"
+
+
+def _status_error_path(plan: list) -> str | None:
+    if not isinstance(plan, list):
+        return None
+    final = next((s for s in plan if s.get("kind") == "derivative_output"), None)
+    return final.get("error_path") if final else None
+
+
+def _cmd_status(args: argparse.Namespace) -> int:
+    from neurodags.orchestrators import run_pipeline
+
+    config = _load_pipeline_config(args.config)
+    derivatives = _resolve_derivatives(config, args.derivatives)
+
+    result = run_pipeline(
+        pipeline_configuration=args.config,
+        datasets_configuration=args.datasets,
+        derivatives=derivatives,
+        dry_run=True,
+    )
+
+    if result is None or result.empty:
+        print("No files found.")
+        return 0
+
+    rows = []
+    for _, row in result.iterrows():
+        plan = row.get("plan", [])
+        status = _status_classify(plan)
+        rows.append(
+            {
+                "derivative": row.get("derivative", "unknown"),
+                "file_path": row.get("file_path", ""),
+                "status": status,
+                "error_path": _status_error_path(plan),
+            }
+        )
+
+    import pandas as pd
+
+    status_df = pd.DataFrame(rows)
+    all_derivs = sorted(status_df["derivative"].unique())
+    total_files = status_df["file_path"].nunique()
+
+    col_w = max(24, max(len(d) for d in all_derivs) + 2)
+    header = f"{'Derivative':<{col_w}} {'total':>6}  {'done':>6}  {'missing':>8}  {'errored':>8}"
+    sep = "─" * len(header)
+
+    print(f"config: {args.config}")
+    print(f"files:  {total_files}")
+    print()
+    print(header)
+    print(sep)
+
+    grand = {"total": 0, "done": 0, "missing": 0, "errored": 0}
+    has_errors = False
+
+    for deriv in all_derivs:
+        sub = status_df[status_df["derivative"] == deriv]
+        counts = sub["status"].value_counts()
+        total = len(sub)
+        done = int(counts.get("done", 0))
+        missing = int(counts.get("missing", 0))
+        errored = int(counts.get("errored", 0))
+        for k, v in (("total", total), ("done", done), ("missing", missing), ("errored", errored)):
+            grand[k] += v
+        if errored:
+            has_errors = True
+        print(f"{deriv:<{col_w}} {total:>6}  {done:>6}  {missing:>8}  {errored:>8}")
+
+    print(sep)
+    print(
+        f"{'Total':<{col_w}} {grand['total']:>6}  {grand['done']:>6}"
+        f"  {grand['missing']:>8}  {grand['errored']:>8}"
+    )
+
+    if has_errors:
+        print(f"\n{grand['errored']} error(s) found.", end="")
+        if not args.list_errors:
+            print("  Run with --list-errors for details.", end="")
+        print()
+
+    if args.list_errors:
+        errored_df = status_df[status_df["status"] == "errored"]
+        if not errored_df.empty:
+            print("\nErrored files:")
+            for deriv in all_derivs:
+                sub = errored_df[errored_df["derivative"] == deriv]
+                if sub.empty:
+                    continue
+                print(f"  [{deriv}]")
+                for _, row in sub.iterrows():
+                    print(f"    {row['file_path']}")
+                    if row.get("error_path"):
+                        print(f"      error file: {row['error_path']}")
+
+    if args.list_missing:
+        missing_df = status_df[status_df["status"] == "missing"]
+        if not missing_df.empty:
+            print("\nMissing files:")
+            for deriv in all_derivs:
+                sub = missing_df[missing_df["derivative"] == deriv]
+                if sub.empty:
+                    continue
+                print(f"  [{deriv}]")
+                for _, row in sub.iterrows():
+                    print(f"    {row['file_path']}")
+
+    return 1 if has_errors else 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="NeuroDAGs command line interface")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -383,6 +509,35 @@ def build_parser() -> argparse.ArgumentParser:
         help="Derivative to use for counting. Repeat to add more. Defaults to first in DerivativeList.",
     )
 
+    status_parser = subparsers.add_parser(
+        "status",
+        help="Show how many files are done, missing, or errored per derivative.",
+    )
+    status_parser.add_argument("config", help="Path to the pipeline YAML configuration.")
+    status_parser.add_argument(
+        "-d",
+        "--datasets",
+        default=None,
+        help="Optional path to a datasets YAML override.",
+    )
+    status_parser.add_argument(
+        "--derivative",
+        action="append",
+        dest="derivatives",
+        default=None,
+        help="Derivative to check. Repeat to add more. Defaults to all in DerivativeList.",
+    )
+    status_parser.add_argument(
+        "--list-errors",
+        action="store_true",
+        help="Print the file paths of errored files below the summary table.",
+    )
+    status_parser.add_argument(
+        "--list-missing",
+        action="store_true",
+        help="Print the file paths of missing (not yet computed) files below the summary table.",
+    )
+
     slurm_parser = subparsers.add_parser(
         "slurm-script",
         help="Emit a SLURM array job template populated with this pipeline's derivatives.",
@@ -452,7 +607,7 @@ def _cmd_run(args: argparse.Namespace, *, dry_run: bool) -> int:
     derivatives = _resolve_derivatives(config, args.derivatives)
 
     result = run_pipeline(
-        pipeline_configuration=config,
+        pipeline_configuration=args.config,
         datasets_configuration=args.datasets,
         derivatives=derivatives,
         max_files_per_dataset=args.max_files_per_dataset,
@@ -600,6 +755,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_view(args)
     if args.command == "count":
         return _cmd_count(args)
+    if args.command == "status":
+        return _cmd_status(args)
     if args.command == "slurm-script":
         return _cmd_slurm_script(args)
 
