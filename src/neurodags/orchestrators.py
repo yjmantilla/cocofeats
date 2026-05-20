@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import pandas as pd
+import structlog
 from joblib import Parallel, delayed
 
 from neurodags.dag import collect_derivative_for_dataframe, run_derivative
@@ -693,86 +694,81 @@ def build_derivative_dataframe(
 
     rows: list[dict[str, Any]] = []
     long_rows: list[dict[str, Any]] = []
+    n_files = len(all_files)
     for index, dataset_name, file_path in all_files:
-        try:
-            dataset_config = datasets_configs[dataset_name]
-            common_root = common_roots.get(dataset_name)
-            reference_base = _build_reference_base(
-                file_path, dataset_config, common_root, mount_point
-            )
-            row: dict[str, Any] = {
-                "index": index,
-                "dataset": dataset_name,
-                "file_path": file_path,
-            }
-            for derivative_name in selected_derivatives:
-                derivative_def = derivative_definitions.get(derivative_name, {}) or {}
-                try:
-                    derivative_values = collect_derivative_for_dataframe(
-                        derivative_def,
-                        derivative_name,
-                        file_path,
-                        reference_base=reference_base,
-                        dataset_config=dataset_config,
-                        mount_point=mount_point,
-                        preserve_complex_values=preserve_complex_values,
-                        flatten_xarray_artifacts=not preserve_complex_values,
-                    )
-                    if derivative_values:
-                        row.update(derivative_values)
-                        if collect_long_rows:
-                            for column_name, value in derivative_values.items():
+        with structlog.contextvars.bound_contextvars(
+            file_path=file_path, dataset=dataset_name, index=index
+        ):
+            log.info("Collecting dataframe row", total=n_files)
+            try:
+                dataset_config = datasets_configs[dataset_name]
+                common_root = common_roots.get(dataset_name)
+                reference_base = _build_reference_base(
+                    file_path, dataset_config, common_root, mount_point
+                )
+                row: dict[str, Any] = {
+                    "index": index,
+                    "dataset": dataset_name,
+                    "file_path": file_path,
+                }
+                for derivative_name in selected_derivatives:
+                    derivative_def = derivative_definitions.get(derivative_name, {}) or {}
+                    with structlog.contextvars.bound_contextvars(derivative=derivative_name):
+                        try:
+                            derivative_values = collect_derivative_for_dataframe(
+                                derivative_def,
+                                derivative_name,
+                                file_path,
+                                reference_base=reference_base,
+                                dataset_config=dataset_config,
+                                mount_point=mount_point,
+                                preserve_complex_values=preserve_complex_values,
+                                flatten_xarray_artifacts=not preserve_complex_values,
+                            )
+                            if derivative_values:
+                                row.update(derivative_values)
+                                if collect_long_rows:
+                                    for column_name, value in derivative_values.items():
+                                        long_rows.append(
+                                            {
+                                                "index": index,
+                                                "dataset": dataset_name,
+                                                "file_path": file_path,
+                                                "derivative": column_name,
+                                                "value": value,
+                                            }
+                                        )
+                        except Exception as derivative_error:
+                            log.error(
+                                "Error collecting derivative for dataframe",
+                                error=str(derivative_error),
+                                exc_info=True,
+                            )
+                            if raise_on_error:
+                                raise
+                            row[f"{derivative_name}__error"] = str(derivative_error)
+                            if collect_long_rows:
                                 long_rows.append(
                                     {
                                         "index": index,
                                         "dataset": dataset_name,
                                         "file_path": file_path,
-                                        "derivative": column_name,
-                                        "value": value,
+                                        "derivative": f"{derivative_name}__error",
+                                        "value": str(derivative_error),
                                     }
                                 )
-                except Exception as derivative_error:
-                    log.error(
-                        "Error collecting derivative for dataframe",
-                        derivative=derivative_name,
-                        index=index,
-                        dataset=dataset_name,
-                        file_path=file_path,
-                        error=str(derivative_error),
-                        exc_info=True,
-                    )
-                    if raise_on_error:
-                        raise
-                    row[f"{derivative_name}__error"] = str(derivative_error)
-                    if collect_long_rows:
-                        long_rows.append(
-                            {
-                                "index": index,
-                                "dataset": dataset_name,
-                                "file_path": file_path,
-                                "derivative": f"{derivative_name}__error",
-                                "value": str(derivative_error),
-                            }
-                        )
-            rows.append(row)
-            log.debug(
-                "Collected dataframe row",
-                index=index,
-                dataset=dataset_name,
-                file_path=file_path,
-                collected_derivatives=len(selected_derivatives),
-            )
-        except Exception as error:
-            log.error(
-                "Error collecting dataframe row",
-                index=index,
-                dataset=dataset_name,
-                file_path=file_path,
-                error=str(error),
-                exc_info=True,
-            )
-            if raise_on_error:
-                raise
+                rows.append(row)
+                log.debug(
+                    "Collected dataframe row", collected_derivatives=len(selected_derivatives)
+                )
+            except Exception as error:
+                log.error(
+                    "Error collecting dataframe row",
+                    error=str(error),
+                    exc_info=True,
+                )
+                if raise_on_error:
+                    raise
 
     if output_format == "long":
         if not long_rows:

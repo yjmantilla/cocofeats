@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 from typing import Generator
 
@@ -55,7 +56,7 @@ def _last_json_line(text: str) -> dict:
 
 
 def test_json_render_when_not_tty(monkeypatch, capsys):
-    # Don’t replace stdout; just make it report “not a TTY”
+    # Don't replace stdout; just make it report "not a TTY"
     monkeypatch.setattr(sys.stdout, "isatty", lambda: False, raising=False)
 
     configure_logging(level="INFO")
@@ -71,16 +72,16 @@ def test_json_render_when_not_tty(monkeypatch, capsys):
 
 
 def test_console_render_when_tty(monkeypatch, capsys):
-    # Make stdout “a TTY”
+    # Make stdout "a TTY"
     monkeypatch.setattr(sys.stdout, "isatty", lambda: True, raising=False)
 
     configure_logging(level="INFO")
     get_logger("cli").info("hi", foo=1)
 
     out = _stdout_text(capsys)
-    # Don’t assert exact formatting; just check key bits are present
-    assert "hi" in out
-    assert ("foo=1" in out) or ('"foo": 1' in out)  # guard in case console changes
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", out)  # strip ANSI colour codes
+    assert "hi" in plain
+    assert ("foo=1" in plain) or ('"foo": 1' in plain)
 
 
 def test_level_filtering(capsys, monkeypatch):
