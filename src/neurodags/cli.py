@@ -474,6 +474,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Re-raise dataframe collection errors.",
     )
     dataframe_parser.add_argument(
+        "--n-jobs",
+        type=int,
+        default=None,
+        help="Number of parallel workers for file-level collection. -1 uses all cores.",
+    )
+    dataframe_parser.add_argument(
         "--output",
         default="output_neurodags_dataframe.csv",
         help="Optional CSV or Parquet output path.",
@@ -657,6 +663,7 @@ def _cmd_dataframe(args: argparse.Namespace) -> int:
         output_format=args.output_format,
         preserve_complex_values=args.preserve_complex_values,
         raise_on_error=args.raise_on_error,
+        n_jobs=args.n_jobs,
     )
     if args.output:
         output_path = _save_dataframe(df, args.output, "derivative_dataframe.csv")
