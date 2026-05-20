@@ -144,6 +144,8 @@ neurodags dataframe pipeline.yml --format wide --output features.csv
 neurodags dataframe pipeline.yml --format long --output features.parquet
 neurodags dataframe pipeline.yml --include-derivative PowerSpectrum --include-derivative BandPower
 neurodags dataframe pipeline.yml --max-files-per-dataset 5
+neurodags dataframe pipeline.yml --n-jobs 4   # parallel file-level collection
+neurodags dataframe pipeline.yml --n-jobs -1  # all cores
 ```
 
 ### DAG Visualization

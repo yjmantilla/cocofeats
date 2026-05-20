@@ -136,7 +136,11 @@ neurodags dataframe pipeline.yml --format wide --output features.csv
 neurodags dataframe pipeline.yml --format long --output features.parquet
 neurodags dataframe pipeline.yml --include-derivative PowerSpectrum --include-derivative BandPower
 neurodags dataframe pipeline.yml --max-files-per-dataset 5
+neurodags dataframe pipeline.yml --n-jobs 4    # parallel file-level collection
+neurodags dataframe pipeline.yml --n-jobs -1   # all cores
 ```
+
+Parallelism is per-file (each worker collects all derivatives for one file), so both wide and long formats work correctly. Artifact loading is IO-bound so threading is used internally.
 
 See {doc}`dataframe_assembly` for format details and how to mark derivatives for dataframe inclusion.
 
