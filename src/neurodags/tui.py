@@ -391,16 +391,14 @@ class NeuroDagsApp(App):
     # ------------------------------------------------------------------
 
     async def _run_dry_run(self) -> None:
-        from neurodags.orchestrators import run_pipeline
+        from neurodags.orchestrators import iterate_derivative_pipeline, run_pipeline
 
         if self._config is None:
             self.notify("Load config first.", severity="error")
             return
         dryrun_sel = self.query_one("#dryrun-derivative", Select)
         val = dryrun_sel.value
-        derivatives: list[str] | None = (
-            None if (dryrun_sel.is_blank() or val == "__all__") else [str(val)]
-        )
+        is_specific = not (dryrun_sel.is_blank() or val == "__all__")
         max_files = _parse_int(self.query_one("#dryrun-max-files", Input).value)
         skip_errors = self.query_one("#dryrun-skip-errors", Checkbox).value
 
@@ -409,15 +407,26 @@ class NeuroDagsApp(App):
         self.notify("Running dry run…")
 
         try:
-            result = await asyncio.to_thread(
-                run_pipeline,
-                self._config_path,
-                datasets_configuration=self._datasets_path,
-                derivatives=derivatives,
-                max_files_per_dataset=max_files,
-                dry_run=True,
-                skip_errors=skip_errors,
-            )
+            if is_specific:
+                result = await asyncio.to_thread(
+                    iterate_derivative_pipeline,
+                    self._config_path,
+                    str(val),
+                    datasets_configuration=self._datasets_path,
+                    max_files_per_dataset=max_files,
+                    dry_run=True,
+                    skip_errors=skip_errors,
+                )
+            else:
+                result = await asyncio.to_thread(
+                    run_pipeline,
+                    self._config_path,
+                    datasets_configuration=self._datasets_path,
+                    derivatives=None,
+                    max_files_per_dataset=max_files,
+                    dry_run=True,
+                    skip_errors=skip_errors,
+                )
         except Exception as exc:
             self.notify(f"Dry run error: {exc}", severity="error")
             return
