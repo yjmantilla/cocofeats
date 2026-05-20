@@ -140,7 +140,7 @@ neurodags dataframe pipeline.yml --n-jobs 4    # parallel file-level collection
 neurodags dataframe pipeline.yml --n-jobs -1   # all cores
 ```
 
-Parallelism is per-file (each worker collects all derivatives for one file), so both wide and long formats work correctly. Artifact loading is IO-bound so threading is used internally.
+Parallelism is per-file using separate processes (loky backend). Threading is intentionally avoided because NetCDF4/HDF5 is not thread-safe — concurrent thread access to `.nc` files causes `[Errno -101] HDF error`.
 
 See {doc}`dataframe_assembly` for format details and how to mark derivatives for dataframe inclusion.
 
