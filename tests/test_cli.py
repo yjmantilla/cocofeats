@@ -346,6 +346,20 @@ def test_status_no_list_errors_hint_shown(dummy_pipeline, capsys):
     assert "--list-errors" in out
 
 
+def test_status_njobs_passed_to_run_pipeline(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "a.vhdr", "plan": _make_plan(cached=True, has_error=False)},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df) as mock_run,
+    ):
+        main(["status", "pipeline.yml", "--n-jobs", "4"])
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("n_jobs") == 4
+
+
 def test_cmd_run_passes_path_string_to_run_pipeline(dummy_pipeline):
     """_cmd_run must pass args.config (path str) not the loaded dict to run_pipeline.
 
