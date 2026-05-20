@@ -106,6 +106,18 @@ def test_dataframe_command_passes_arguments(dummy_pipeline):
         assert kwargs["output_format"] == "long"
 
 
+def test_dataframe_njobs_passed_to_build_derivative_dataframe(dummy_pipeline):
+    cfg = dummy_pipeline["config"]
+    fake_df = pd.DataFrame({"x": [1]})
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.build_derivative_dataframe", return_value=fake_df) as build_df,
+    ):
+        assert main(["dataframe", "pipeline.yml", "--n-jobs", "4"]) == 0
+        _, kwargs = build_df.call_args
+        assert kwargs.get("n_jobs") == 4
+
+
 def test_dag_pipeline_prints_mermaid(capsys):
     with (
         patch("neurodags.cli._load_pipeline_config", return_value={"DerivativeDefinitions": {}}),

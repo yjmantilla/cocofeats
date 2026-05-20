@@ -209,3 +209,31 @@ def test_for_dataframe_derivative_appears_in_df(dummy_pipeline):
 
     df = build_derivative_dataframe(cfg, include_derivatives=["BandPowerMean"])
     assert len(df) > 0
+
+
+def test_build_derivative_dataframe_parallel_matches_serial(dummy_pipeline):
+    cfg = dummy_pipeline["config"]
+
+    iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
+    iterate_derivative_pipeline(cfg, "Spectrum", raise_on_error=True)
+
+    serial = build_derivative_dataframe(cfg, output_format="wide", n_jobs=1)
+    parallel = build_derivative_dataframe(cfg, output_format="wide", n_jobs=2)
+
+    assert len(parallel) == len(serial)
+    assert set(parallel.columns) == set(serial.columns)
+    # file_path sets must match
+    assert set(parallel["file_path"]) == set(serial["file_path"])
+
+
+def test_build_derivative_dataframe_parallel_long_matches_serial(dummy_pipeline):
+    cfg = dummy_pipeline["config"]
+
+    iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
+    iterate_derivative_pipeline(cfg, "Spectrum", raise_on_error=True)
+
+    serial = build_derivative_dataframe(cfg, output_format="long", n_jobs=1)
+    parallel = build_derivative_dataframe(cfg, output_format="long", n_jobs=2)
+
+    assert len(parallel) == len(serial)
+    assert set(parallel["file_path"]) == set(serial["file_path"])
