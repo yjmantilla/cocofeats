@@ -106,6 +106,7 @@ def skip_troublesome_tui_members(app, what, name, obj, skip, options):
             "_DryRunTab",
             "_RunTab",
             "_DataFrameTab",
+            "_StatusTab",
             "_NcTab",
         )
     ):
