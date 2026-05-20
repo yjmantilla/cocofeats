@@ -3,6 +3,7 @@
 - `neurodags validate pipeline.yml` — load config and print dataset / derivative summary
 - `neurodags run pipeline.yml --derivative MyDerivative` — execute one derivative
 - `neurodags dry-run pipeline.yml --derivative MyDerivative` — inspect the execution plan
+- `neurodags status pipeline.yml` — show done / missing / errored counts per derivative
 - `neurodags dataframe pipeline.yml --format wide` — assemble dataframe output
 - `neurodags dag pipeline.yml --html pipeline_dag.html` — export Mermaid DAG HTML
 - `neurodags view path/to/file.nc` — launch the Dash explorer

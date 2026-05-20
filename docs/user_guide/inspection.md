@@ -78,6 +78,69 @@ Skipped files are logged and reported in the dry-run plan with `has_error_marker
 rm derivatives/sub-01/ses-SE0/sub-01_ses-SE0_task-rest.vhdr@MyDerivative.error
 ```
 
+## Pipeline Status
+
+`neurodags status` gives a quick at-a-glance summary of how many files are done, missing (not yet computed), or errored — without having to open a CSV.
+
+```bash
+neurodags status pipeline.yml
+```
+
+Example output:
+
+```
+config: /abs/path/pipeline.yml
+files:  42
+
+Derivative               total   done  missing  errored
+───────────────────────────────────────────────────────
+Alpha                       42     30       10        2
+Beta                        42     25       15        2
+───────────────────────────────────────────────────────
+Total                       84     55       25        4
+
+2 error(s) found.  Run with --list-errors for details.
+```
+
+**Status definitions:**
+
+| Status | Meaning |
+|--------|---------|
+| `done` | Output file(s) exist and no `.error` marker present |
+| `missing` | No output file and no `.error` marker — not yet computed |
+| `errored` | A `.error` marker file exists from a previous failed run |
+
+**Flags:**
+
+```bash
+# show only specific derivatives
+neurodags status pipeline.yml --derivative Alpha --derivative Beta
+
+# print the file path of each errored file
+neurodags status pipeline.yml --list-errors
+
+# print the file path of each missing file
+neurodags status pipeline.yml --list-missing
+
+# combine both
+neurodags status pipeline.yml --list-errors --list-missing
+```
+
+With `--list-errors` the `.error` marker file path is shown alongside each failed input, making it easy to inspect or delete:
+
+```
+Errored files:
+  [Alpha]
+    /data/sub-01/ses-01/sub-01_task-rest.vhdr
+      error file: /derivatives/sub-01/ses-01/sub-01_task-rest.vhdr@Alpha.error
+```
+
+**Exit codes:** `0` when no errors are present (missing files are expected during a partial run); `1` when at least one `.error` marker exists. This makes `status` usable in shell scripts or CI checks:
+
+```bash
+neurodags status pipeline.yml || echo "pipeline has failures"
+```
+
 ## DAG Visualization (Mermaid)
 
 NeuroDAGs can render pipeline and derivative graphs as interactive
