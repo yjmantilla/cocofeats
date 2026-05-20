@@ -276,8 +276,6 @@ def _status_error_path(plan: list) -> str | None:
 
 
 def _cmd_status(args: argparse.Namespace) -> int:
-    from neurodags.orchestrators import run_pipeline
-
     config = _load_pipeline_config(args.config)
     derivatives = _resolve_derivatives(config, args.derivatives)
 
