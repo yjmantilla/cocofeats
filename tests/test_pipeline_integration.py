@@ -1,6 +1,8 @@
 """End-to-end integration tests for iterate_derivative_pipeline and build_derivative_dataframe."""
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 
 from neurodags.orchestrators import build_derivative_dataframe, iterate_derivative_pipeline
@@ -237,3 +239,101 @@ def test_build_derivative_dataframe_parallel_long_matches_serial(dummy_pipeline)
 
     assert len(parallel) == len(serial)
     assert set(parallel["file_path"]) == set(serial["file_path"])
+
+
+# ---------------------------------------------------------------------------
+# Error handling in _collect_dataframe_file
+# ---------------------------------------------------------------------------
+
+def test_build_derivative_dataframe_derivative_error_captured(dummy_pipeline):
+    """Derivative-level error is caught and stored as __error column, row still returned."""
+    cfg = dummy_pipeline["config"]
+
+    iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
+    iterate_derivative_pipeline(cfg, "Spectrum", raise_on_error=True)
+
+    with patch(
+        "neurodags.orchestrators.collect_derivative_for_dataframe",
+        side_effect=ValueError("simulated derivative failure"),
+    ):
+        df = build_derivative_dataframe(cfg, output_format="wide")
+
+    assert len(df) > 0
+    assert any("__error" in col for col in df.columns)
+
+
+def test_build_derivative_dataframe_derivative_error_long_captured(dummy_pipeline):
+    """Derivative-level error in long mode adds an __error row."""
+    cfg = dummy_pipeline["config"]
+
+    iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
+    iterate_derivative_pipeline(cfg, "Spectrum", raise_on_error=True)
+
+    with patch(
+        "neurodags.orchestrators.collect_derivative_for_dataframe",
+        side_effect=ValueError("simulated derivative failure"),
+    ):
+        df = build_derivative_dataframe(cfg, output_format="long")
+
+    assert len(df) > 0
+    assert any("__error" in str(v) for v in df["derivative"])
+
+
+def test_build_derivative_dataframe_file_error_row_omitted(dummy_pipeline):
+    """File-level error (outer except) causes row to be omitted from the result."""
+    cfg = dummy_pipeline["config"]
+
+    iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
+    iterate_derivative_pipeline(cfg, "Spectrum", raise_on_error=True)
+
+    with patch(
+        "neurodags.orchestrators._build_reference_base",
+        side_effect=RuntimeError("simulated file failure"),
+    ):
+        df = build_derivative_dataframe(cfg, output_format="wide")
+
+    assert len(df) == 0
+
+
+def test_build_derivative_dataframe_long_empty_when_no_values(dummy_pipeline):
+    """Long format with no derivative values returns empty DataFrame with correct columns."""
+    cfg = dummy_pipeline["config"]
+
+    with patch(
+        "neurodags.orchestrators.collect_derivative_for_dataframe",
+        return_value={},
+    ):
+        df = build_derivative_dataframe(cfg, output_format="long")
+
+    assert len(df) == 0
+    assert "derivative" in df.columns
+
+
+def test_build_derivative_dataframe_derivative_error_raise_on_error(dummy_pipeline):
+    """raise_on_error=True re-raises derivative-level exceptions."""
+    cfg = dummy_pipeline["config"]
+
+    iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
+    iterate_derivative_pipeline(cfg, "Spectrum", raise_on_error=True)
+
+    with pytest.raises(ValueError, match="simulated derivative failure"):
+        with patch(
+            "neurodags.orchestrators.collect_derivative_for_dataframe",
+            side_effect=ValueError("simulated derivative failure"),
+        ):
+            build_derivative_dataframe(cfg, output_format="wide", raise_on_error=True)
+
+
+def test_build_derivative_dataframe_file_error_raise_on_error(dummy_pipeline):
+    """raise_on_error=True re-raises file-level exceptions."""
+    cfg = dummy_pipeline["config"]
+
+    iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
+    iterate_derivative_pipeline(cfg, "Spectrum", raise_on_error=True)
+
+    with pytest.raises(RuntimeError, match="simulated file failure"):
+        with patch(
+            "neurodags.orchestrators._build_reference_base",
+            side_effect=RuntimeError("simulated file failure"),
+        ):
+            build_derivative_dataframe(cfg, output_format="wide", raise_on_error=True)
