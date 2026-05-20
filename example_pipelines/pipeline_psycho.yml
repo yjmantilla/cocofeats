@@ -1,4 +1,4 @@
-datasets: example_pipelines/datasets_psycho.yml
+datasets: datasets_psycho.yml
 mount_point: local
 new_definitions: null
 DerivativeDefinitions:
