@@ -202,6 +202,29 @@ class _DataFrameTab(Vertical):
         yield DataTable(id="df-table")
 
 
+class _StatusTab(Vertical):
+    """Pipeline status tab."""
+
+    DEFAULT_CSS = """
+    _StatusTab { height: 1fr; padding: 1; }
+    _StatusTab .row { height: auto; margin-bottom: 1; }
+    _StatusTab Select { width: 2fr; }
+    _StatusTab #status-summary { height: auto; margin-bottom: 1; color: $text-muted; }
+    _StatusTab DataTable { height: 1fr; }
+    _StatusTab #status-errors { height: auto; margin-top: 1; color: $error; }
+    """
+    """Internal CSS."""
+
+    def compose(self) -> ComposeResult:
+        """Compose child widgets."""
+        with Horizontal(classes="row"):
+            yield Select([], id="status-derivative", prompt="All (DerivativeList)")
+            yield Button("Refresh", id="btn-status-refresh", variant="primary")
+        yield Static("", id="status-summary")
+        yield DataTable(id="status-table")
+        yield Static("", id="status-errors")
+
+
 class _NcTab(Vertical):
     """NC viewer tab."""
 
@@ -255,6 +278,8 @@ class NeuroDagsApp(App):
                 yield _RunTab()
             with TabPane("DataFrame", id="tab-dataframe"):
                 yield _DataFrameTab()
+            with TabPane("Status", id="tab-status"):
+                yield _StatusTab()
             with TabPane("NC Viewer", id="tab-nc"):
                 yield _NcTab()
         yield Footer()
@@ -281,6 +306,7 @@ class NeuroDagsApp(App):
             "btn-dag-refresh": self._refresh_dag,
             "btn-dag-html": self._open_dag_html,
             "btn-dryrun": lambda: self.run_worker(self._run_dry_run(), exclusive=True),
+            "btn-status-refresh": lambda: self.run_worker(self._run_status(), exclusive=True),
             "btn-run": lambda: self.run_worker(self._run_pipeline(), exclusive=True),
             "btn-df-assemble": lambda: self.run_worker(self._assemble_dataframe(), exclusive=True),
             "btn-df-save": self._save_dataframe,
@@ -349,7 +375,7 @@ class NeuroDagsApp(App):
     def _sync_derivative_selects(self) -> None:
         options = [(d, d) for d in self._derivatives]
         all_options = [("All (DerivativeList)", "__all__"), *options]
-        for widget_id in ("#dryrun-derivative", "#run-derivative"):
+        for widget_id in ("#dryrun-derivative", "#run-derivative", "#status-derivative"):
             try:
                 sel = self.query_one(widget_id, Select)
                 sel.set_options(all_options)
@@ -565,6 +591,76 @@ class NeuroDagsApp(App):
             self.notify(f"Save error: {exc}", severity="error")
 
     # ------------------------------------------------------------------
+    # Status
+    # ------------------------------------------------------------------
+
+    async def _run_status(self) -> None:
+        if self._config is None:
+            self.notify("Load config first.", severity="error")
+            return
+
+        sel = self.query_one("#status-derivative", Select)
+        val = sel.value
+        derivatives: list[str] | None = None if (sel.is_blank() or val == "__all__") else [str(val)]
+
+        table = self.query_one("#status-table", DataTable)
+        summary = self.query_one("#status-summary", Static)
+        errors_widget = self.query_one("#status-errors", Static)
+        table.clear(columns=True)
+        summary.update("Computing…")
+        errors_widget.update("")
+        self.notify("Computing status…")
+
+        try:
+            rows, grand, errored_files = await asyncio.to_thread(
+                _status_sync,
+                self._config_path,
+                self._datasets_path,
+                derivatives,
+            )
+        except Exception as exc:
+            summary.update(f"[red]Error:[/red] {escape_markup(str(exc))}")
+            self.notify(f"Status error: {exc}", severity="error")
+            return
+
+        table.add_columns("Derivative", "Total", "Done", "Missing", "Errored")
+        for r in rows:
+            table.add_row(
+                r["derivative"],
+                str(r["total"]),
+                str(r["done"]),
+                str(r["missing"]),
+                str(r["errored"]),
+            )
+        table.add_row(
+            "[bold]Total[/bold]",
+            str(grand["total"]),
+            str(grand["done"]),
+            str(grand["missing"]),
+            str(grand["errored"]),
+        )
+
+        files_label = grand["total"] // max(len(rows), 1) if rows else 0
+        summary.update(
+            f"files: {files_label}  |  "
+            f"done: {grand['done']}  missing: {grand['missing']}  errored: {grand['errored']}"
+        )
+
+        if errored_files:
+            lines = ["[bold red]Errored files:[/bold red]"]
+            for deriv, fpath, epath in errored_files:
+                lines.append(f"  [{escape_markup(deriv)}] {escape_markup(fpath)}")
+                if epath:
+                    lines.append(f"    [dim]error: {escape_markup(epath)}[/dim]")
+            errors_widget.update("\n".join(lines))
+
+        severity = "error" if grand["errored"] else "information"
+        self.notify(
+            f"done={grand['done']} missing={grand['missing']} errored={grand['errored']}",
+            severity=severity,
+        )
+
+    # ------------------------------------------------------------------
     # NC viewer
     # ------------------------------------------------------------------
 
@@ -622,6 +718,57 @@ def _parse_int(s: str) -> int | None:
         return int(s)
     except ValueError:
         return None
+
+
+def _status_sync(
+    config: str | None,
+    datasets_config: str | None,
+    derivatives: list[str] | None,
+) -> tuple[list[dict], dict, list[tuple[str, str, str | None]]]:
+    from neurodags.cli import _status_classify, _status_error_path
+    from neurodags.orchestrators import run_pipeline
+
+    result = run_pipeline(
+        config,
+        datasets_configuration=datasets_config,
+        derivatives=derivatives,
+        dry_run=True,
+    )
+
+    if result is None or result.empty:
+        return [], {"total": 0, "done": 0, "missing": 0, "errored": 0}, []
+
+    rows_by_deriv: dict[str, dict] = {}
+    errored_files: list[tuple[str, str, str | None]] = []
+
+    for _, row in result.iterrows():
+        plan = row.get("plan", [])
+        status = _status_classify(plan)
+        deriv = str(row.get("derivative", "unknown"))
+        fpath = str(row.get("file_path", ""))
+
+        if deriv not in rows_by_deriv:
+            rows_by_deriv[deriv] = {
+                "derivative": deriv,
+                "total": 0,
+                "done": 0,
+                "missing": 0,
+                "errored": 0,
+            }
+        rows_by_deriv[deriv]["total"] += 1
+        if status in rows_by_deriv[deriv]:
+            rows_by_deriv[deriv][status] += 1
+
+        if status == "errored":
+            errored_files.append((deriv, fpath, _status_error_path(plan)))
+
+    rows = sorted(rows_by_deriv.values(), key=lambda r: r["derivative"])
+    grand: dict[str, int] = {"total": 0, "done": 0, "missing": 0, "errored": 0}
+    for r in rows:
+        for k in grand:
+            grand[k] += r[k]
+
+    return rows, grand, errored_files
 
 
 def _run_pipeline_sync(
