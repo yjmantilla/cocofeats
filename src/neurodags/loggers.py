@@ -91,6 +91,7 @@ def configure_logging(
     if level is None:
         level = os.getenv("LOG_LEVEL", "INFO")
     level = _coerce_level(level)
+    os.environ["LOG_LEVEL"] = logging.getLevelName(level)
 
     if json is None:
         env_fmt = os.getenv("LOG_FMT", "").lower()

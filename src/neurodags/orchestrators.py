@@ -601,8 +601,8 @@ def build_derivative_dataframe(
         Re-raise exceptions encountered while collecting derivatives; defaults to False.
     n_jobs : int, optional
         Number of parallel workers for file-level collection. ``-1`` uses all cores, ``1`` or
-        ``None`` runs serially. Parallelism is per-file (each worker handles all derivatives for
-        one file), so both wide and long output formats are fully supported.
+        ``None`` runs serially. Parallelism is per-file using separate processes (loky) to avoid
+        HDF5/NetCDF4 thread-safety issues — both wide and long output formats are fully supported.
 
     Returns
     -------
@@ -727,7 +727,7 @@ def build_derivative_dataframe(
     if effective_n_jobs == 1:
         results = [_collect_dataframe_file(*args) for args in job_args]
     else:
-        results = Parallel(n_jobs=effective_n_jobs, prefer="threads")(
+        results = Parallel(n_jobs=effective_n_jobs, backend="loky")(
             delayed(_collect_dataframe_file)(*args) for args in job_args
         )
 
@@ -770,6 +770,9 @@ def _collect_dataframe_file(
     n_files: int,
 ) -> tuple[dict | None, list[dict]]:
     """Worker function for parallel dataframe collection — one call per file."""
+    from neurodags.loggers import configure_logging
+
+    configure_logging()  # no-op in main process; configures structlog in fresh loky workers
     from neurodags.definitions import DatasetConfig
 
     dataset_config = DatasetConfig(**dataset_config_dict)
