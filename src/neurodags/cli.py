@@ -459,7 +459,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     dataframe_parser.add_argument(
         "--output",
-        default=None,
+        default="output_neurodags_dataframe.csv",
         help="Optional CSV or Parquet output path.",
     )
 
