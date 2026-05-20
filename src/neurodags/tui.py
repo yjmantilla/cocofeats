@@ -623,6 +623,11 @@ class NeuroDagsApp(App):
             self.notify(f"Status error: {exc}", severity="error")
             return
 
+        if not rows:
+            summary.update("No files found.")
+            self.notify("No files found.", severity="warning")
+            return
+
         table.add_columns("Derivative", "Total", "Done", "Missing", "Errored")
         for r in rows:
             table.add_row(
