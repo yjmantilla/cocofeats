@@ -18,6 +18,7 @@ from neurodags.tui import (  # noqa: E402
     _InspectableStatic,
     _parse_int,
     _run_pipeline_sync,
+    _status_sync,
     main,
 )
 from textual.widgets import DataTable, Input, Select, Static, TabbedContent, TextArea  # noqa: E402
@@ -649,6 +650,139 @@ class TestNcTab:
                     assert "error" in str(m.call_args)
 
         _run(_())
+
+
+# ---------------------------------------------------------------------------
+# Status tab
+# ---------------------------------------------------------------------------
+
+
+def _make_status_plan(*, cached: bool, has_error: bool, error_path: str | None = None) -> list:
+    return [
+        {
+            "id": "final",
+            "kind": "derivative_output",
+            "name": "StepA",
+            "prefix": "/out/file@StepA",
+            "cached": cached,
+            "paths": ["/out/file@StepA.fif"] if cached else [],
+            "has_error_marker": has_error,
+            "error_path": error_path,
+        }
+    ]
+
+
+class TestStatusTab:
+    def test_status_without_config_notifies_error(self):
+        async def _():
+            async with NeuroDagsApp().run_test() as pilot:
+                app = pilot.app
+                with patch.object(app, "notify") as m:
+                    await app._run_status()
+                    m.assert_called_once()
+                    assert "error" in str(m.call_args)
+
+        _run(_())
+
+    def test_status_populates_table(self):
+        rows = [
+            {"derivative": "StepA", "file_path": "a.vhdr", "plan": _make_status_plan(cached=True, has_error=False)},
+            {"derivative": "StepA", "file_path": "b.vhdr", "plan": _make_status_plan(cached=False, has_error=False)},
+        ]
+        fake_df = pd.DataFrame(rows)
+
+        async def _():
+            async with NeuroDagsApp().run_test() as pilot:
+                app = pilot.app
+                app._config = FAKE_CONFIG
+                app._derivatives = ["StepA"]
+
+                with patch("neurodags.orchestrators.run_pipeline", return_value=fake_df):
+                    await app._run_status()
+
+                table = app.query_one("#status-table", DataTable)
+                # one data row + grand-total row
+                assert table.row_count == 2
+
+        _run(_())
+
+    def test_status_shows_errored_files(self):
+        rows = [
+            {"derivative": "StepA", "file_path": "/data/bad.vhdr", "plan": _make_status_plan(cached=False, has_error=True, error_path="/out/bad@StepA.error")},
+        ]
+        fake_df = pd.DataFrame(rows)
+
+        async def _():
+            async with NeuroDagsApp().run_test() as pilot:
+                app = pilot.app
+                app._config = FAKE_CONFIG
+                app._derivatives = ["StepA"]
+
+                with patch("neurodags.orchestrators.run_pipeline", return_value=fake_df):
+                    await app._run_status()
+
+                errors = str(app.query_one("#status-errors", Static).render())
+                assert "/data/bad.vhdr" in errors
+                assert "/out/bad@StepA.error" in errors
+
+        _run(_())
+
+    def test_status_no_files_warns(self):
+        async def _():
+            async with NeuroDagsApp().run_test() as pilot:
+                app = pilot.app
+                app._config = FAKE_CONFIG
+
+                with (
+                    patch("neurodags.orchestrators.run_pipeline", return_value=pd.DataFrame()),
+                    patch.object(app, "notify") as m,
+                ):
+                    await app._run_status()
+                    assert "warning" in str(m.call_args)
+
+        _run(_())
+
+    def test_status_exception_notifies_error(self):
+        async def _():
+            async with NeuroDagsApp().run_test() as pilot:
+                app = pilot.app
+                app._config = FAKE_CONFIG
+
+                with (
+                    patch("neurodags.orchestrators.run_pipeline", side_effect=RuntimeError("boom")),
+                    patch.object(app, "notify") as m,
+                ):
+                    await app._run_status()
+                    assert "error" in str(m.call_args)
+
+        _run(_())
+
+
+class TestStatusSync:
+    def test_returns_empty_on_no_files(self):
+        with patch("neurodags.orchestrators.run_pipeline", return_value=pd.DataFrame()):
+            rows, grand, errored = _status_sync("p.yml", None, None)
+        assert rows == []
+        assert grand == {"total": 0, "done": 0, "missing": 0, "errored": 0}
+        assert errored == []
+
+    def test_classifies_done_missing_errored(self):
+        fake_df = pd.DataFrame([
+            {"derivative": "StepA", "file_path": "a.vhdr", "plan": _make_status_plan(cached=True, has_error=False)},
+            {"derivative": "StepA", "file_path": "b.vhdr", "plan": _make_status_plan(cached=False, has_error=False)},
+            {"derivative": "StepA", "file_path": "c.vhdr", "plan": _make_status_plan(cached=False, has_error=True, error_path="c.error")},
+        ])
+        with patch("neurodags.orchestrators.run_pipeline", return_value=fake_df):
+            rows, grand, errored = _status_sync("p.yml", None, None)
+        assert grand == {"total": 3, "done": 1, "missing": 1, "errored": 1}
+        assert len(errored) == 1
+        assert errored[0] == ("StepA", "c.vhdr", "c.error")
+
+    def test_derivative_filter_passed_through(self):
+        with patch("neurodags.orchestrators.run_pipeline", return_value=pd.DataFrame()) as mock_run:
+            _status_sync("p.yml", None, ["StepA"])
+            _, kwargs = mock_run.call_args
+            assert kwargs.get("derivatives") == ["StepA"]
 
 
 # ---------------------------------------------------------------------------

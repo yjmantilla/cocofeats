@@ -47,6 +47,7 @@ def test_run_uses_derivative_list_when_not_explicit(dummy_pipeline):
     cfg = dummy_pipeline["config"]
     with (
         patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.orchestrators.load_configuration", return_value=cfg),
         patch("neurodags.orchestrators.iterate_derivative_pipeline") as iterate,
     ):
         assert main(["run", "pipeline.yml"]) == 0
@@ -58,6 +59,7 @@ def test_run_with_explicit_derivative(dummy_pipeline):
     cfg = dummy_pipeline["config"]
     with (
         patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.orchestrators.load_configuration", return_value=cfg),
         patch("neurodags.orchestrators.iterate_derivative_pipeline") as iterate,
     ):
         assert main(["run", "pipeline.yml", "--derivative", "BasicPrep"]) == 0
@@ -70,6 +72,7 @@ def test_dry_run_saves_combined_dataframe(dummy_pipeline):
     fake_df = pd.DataFrame({"file_path": ["a"], "plan": [[]]})
     with (
         patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.orchestrators.load_configuration", return_value=cfg),
         patch("neurodags.orchestrators.iterate_derivative_pipeline", return_value=fake_df),
         patch("neurodags.cli._save_dataframe") as save_df,
     ):
@@ -233,3 +236,132 @@ def test_slurm_script_respects_topo_order(capsys):
         assert main(["slurm-script", "pipeline.yml", "--pattern", "chained"]) == 0
     out = capsys.readouterr().out
     assert out.index("BasicPrep") < out.index("Spectrum")
+
+
+# ---------------------------------------------------------------------------
+# status command
+# ---------------------------------------------------------------------------
+
+def _make_plan(*, cached: bool, has_error: bool, error_path: str | None = None) -> list:
+    return [
+        {
+            "id": "final",
+            "kind": "derivative_output",
+            "name": "BasicPrep",
+            "prefix": "/out/file@BasicPrep",
+            "cached": cached,
+            "paths": ["/out/file@BasicPrep.fif"] if cached else [],
+            "has_error_marker": has_error,
+            "error_path": error_path,
+        }
+    ]
+
+
+def _status_df(rows: list[dict]) -> pd.DataFrame:
+    return pd.DataFrame(rows)
+
+
+def test_status_no_files_exits_0(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=pd.DataFrame()),
+    ):
+        assert main(["status", "pipeline.yml"]) == 0
+    assert "No files" in capsys.readouterr().out
+
+
+def test_status_prints_summary_table(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "a.vhdr", "plan": _make_plan(cached=True, has_error=False)},
+        {"derivative": "BasicPrep", "file_path": "b.vhdr", "plan": _make_plan(cached=False, has_error=False)},
+        {"derivative": "BasicPrep", "file_path": "c.vhdr", "plan": _make_plan(cached=False, has_error=True, error_path="c@BasicPrep.error")},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        rc = main(["status", "pipeline.yml"])
+    out = capsys.readouterr().out
+    assert rc == 1  # has errors
+    assert "BasicPrep" in out
+    assert "1" in out  # done count
+    assert "Total" in out
+
+
+def test_status_exit_0_when_no_errors(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "a.vhdr", "plan": _make_plan(cached=True, has_error=False)},
+        {"derivative": "BasicPrep", "file_path": "b.vhdr", "plan": _make_plan(cached=False, has_error=False)},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        assert main(["status", "pipeline.yml"]) == 0
+
+
+def test_status_list_errors_prints_file_paths(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "/data/sub-01.vhdr", "plan": _make_plan(cached=False, has_error=True, error_path="/out/sub-01@BasicPrep.error")},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        main(["status", "pipeline.yml", "--list-errors"])
+    out = capsys.readouterr().out
+    assert "/data/sub-01.vhdr" in out
+    assert "/out/sub-01@BasicPrep.error" in out
+
+
+def test_status_list_missing_prints_file_paths(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "/data/sub-02.vhdr", "plan": _make_plan(cached=False, has_error=False)},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        main(["status", "pipeline.yml", "--list-missing"])
+    out = capsys.readouterr().out
+    assert "/data/sub-02.vhdr" in out
+
+
+def test_status_no_list_errors_hint_shown(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "x.vhdr", "plan": _make_plan(cached=False, has_error=True)},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        main(["status", "pipeline.yml"])
+    out = capsys.readouterr().out
+    assert "--list-errors" in out
+
+
+def test_cmd_run_passes_path_string_to_run_pipeline(dummy_pipeline):
+    """_cmd_run must pass args.config (path str) not the loaded dict to run_pipeline.
+
+    If the dict is passed instead, new_definitions and datasets relative paths
+    in the YAML are resolved against cwd rather than the pipeline file's location.
+    """
+    cfg = dummy_pipeline["config"]
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline") as mock_run,
+    ):
+        mock_run.return_value = None
+        main(["run", "pipeline.yml", "--derivative", "BasicPrep"])
+        called_config = mock_run.call_args.kwargs.get(
+            "pipeline_configuration", mock_run.call_args.args[0] if mock_run.call_args.args else None
+        )
+        assert called_config == "pipeline.yml", (
+            "run_pipeline must receive the path string, not the parsed dict"
+        )
