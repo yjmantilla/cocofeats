@@ -124,6 +124,10 @@ neurodags status pipeline.yml --list-missing
 
 # combine both
 neurodags status pipeline.yml --list-errors --list-missing
+
+# parallelize the underlying dry-run (same semantics as 'run')
+neurodags status pipeline.yml --n-jobs 4
+neurodags status pipeline.yml --n-jobs -1   # all cores
 ```
 
 With `--list-errors` the `.error` marker file path is shown alongside each failed input, making it easy to inspect or delete:
