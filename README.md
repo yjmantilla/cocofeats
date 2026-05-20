@@ -57,24 +57,133 @@ uv add neurodags[tui]
 
 See the [quickstart example](https://yjmantilla.github.io/neurodags/auto_examples/plot_quickstart_synthetic.html) — full synthetic pipeline, no real data required.
 
-## CLI
+## CLI Reference
 
-NeuroDAGs installs a unified `neurodags` command:
+NeuroDAGs installs a unified `neurodags` command. Global flags (placed before the subcommand) apply everywhere:
 
 ```bash
-neurodags validate pipeline.yml
-neurodags run pipeline.yml                          # all derivatives in DerivativeList
-neurodags run pipeline.yml --derivative CleanedEEG  # or a specific one
-neurodags dry-run pipeline.yml --output dry_run.csv
-neurodags dataframe pipeline.yml --format wide --output features.csv
-neurodags dag pipeline.yml --html pipeline_dag.html
-neurodags view path/to/file.nc
+neurodags --log-level WARNING run pipeline.yml      # suppress INFO output
+neurodags --log-file run.jsonl run pipeline.yml     # also write logs to JSONL file
 ```
 
-If you install the optional TUI extra, you also get:
+All subcommands accept `-d/--datasets <path>` to override the datasets YAML defined in the pipeline file.
+
+The JSONL log file loads directly as a dataframe:
+
+```python
+import pandas as pd
+df = pd.read_json("run.jsonl", lines=True)
+```
+
+### Validation
 
 ```bash
-neurodags tui pipeline.yml --datasets datasets.yml
+neurodags validate pipeline.yml              # load config, print datasets / derivatives summary
+neurodags validate pipeline.yml -d alt.yml   # override datasets
+```
+
+### Execution
+
+```bash
+neurodags run pipeline.yml                          # run all derivatives in DerivativeList
+neurodags run pipeline.yml --derivative CleanedEEG  # run a specific derivative
+neurodags run pipeline.yml --derivative A --derivative B  # run multiple
+
+# parallelism
+neurodags run pipeline.yml --n-jobs 4          # 4 workers
+neurodags run pipeline.yml --n-jobs -1         # all cores
+neurodags run pipeline.yml --n-jobs 4 --joblib-backend loky --joblib-prefer processes
+
+# subset / error control
+neurodags run pipeline.yml --max-files-per-dataset 10
+neurodags run pipeline.yml --only-index 0 5 12   # process only these file indices
+neurodags run pipeline.yml --skip-errors          # skip files with a prior .error marker
+neurodags run pipeline.yml --raise-on-error       # stop on first failure
+```
+
+### Dry Run
+
+Inspect the execution plan without running any nodes. Returns a CSV/Parquet describing
+each file, derivative, and whether the output is already cached.
+
+```bash
+neurodags dry-run pipeline.yml                                   # all derivatives
+neurodags dry-run pipeline.yml --derivative CleanedEEG           # one derivative
+neurodags dry-run pipeline.yml --output plan.csv                 # save to CSV
+neurodags dry-run pipeline.yml --output plan.parquet             # or Parquet
+neurodags dry-run pipeline.yml --n-jobs 4                        # parallel dry-run
+neurodags dry-run pipeline.yml --skip-errors                     # exclude errored files from plan
+```
+
+### Status
+
+Quick summary of done / missing / errored counts per derivative — no CSV needed.
+
+```bash
+neurodags status pipeline.yml                        # summary table
+neurodags status pipeline.yml --derivative Alpha     # filter to one derivative
+neurodags status pipeline.yml --list-errors          # print errored file paths + .error paths
+neurodags status pipeline.yml --list-missing         # print missing file paths
+neurodags status pipeline.yml --list-errors --list-missing
+neurodags status pipeline.yml --n-jobs 4             # parallelize underlying dry-run
+```
+
+Exit code `0` if no errors; `1` if any `.error` marker files exist.
+
+### File Count
+
+```bash
+neurodags count pipeline.yml                         # total unique files the pipeline will process
+neurodags count pipeline.yml --derivative CleanedEEG # count for a specific derivative
+```
+
+### Dataframe Assembly
+
+```bash
+neurodags dataframe pipeline.yml --format wide --output features.csv
+neurodags dataframe pipeline.yml --format long --output features.parquet
+neurodags dataframe pipeline.yml --include-derivative PowerSpectrum --include-derivative BandPower
+neurodags dataframe pipeline.yml --max-files-per-dataset 5
+```
+
+### DAG Visualization
+
+```bash
+neurodags dag pipeline.yml                                       # print Mermaid text
+neurodags dag pipeline.yml --html pipeline_dag.html              # export to HTML
+neurodags dag pipeline.yml --html pipeline_dag.html --open       # export and open in browser
+neurodags dag pipeline.yml --derivative CleanedEEG --html d.html # node-level DAG for one derivative
+```
+
+### File Explorer
+
+```bash
+neurodags view path/to/file.fif   # launch Dash-Plotly explorer for MNE .fif files
+neurodags view path/to/file.nc    # launch Dash-Plotly explorer for xarray NetCDF files
+```
+
+### SLURM / HPC Scripts
+
+Generate ready-to-submit SLURM array job scripts:
+
+```bash
+neurodags slurm-script pipeline.yml                              # per-file pattern (default)
+neurodags slurm-script pipeline.yml --pattern flat               # file × derivative flat array
+neurodags slurm-script pipeline.yml --pattern chained            # chained per-derivative arrays
+neurodags slurm-script pipeline.yml --output run_array.sh        # write to file
+neurodags slurm-script pipeline.yml --derivative CleanedEEG      # restrict to specific derivatives
+```
+
+See [HPC guide](https://yjmantilla.github.io/neurodags/user_guide/hpc.html) for details on each pattern.
+
+### TUI (Terminal User Interface)
+
+Requires `pip install neurodags[tui]`:
+
+```bash
+neurodags tui                          # launch empty TUI, load config interactively
+neurodags tui pipeline.yml             # launch with config pre-loaded
+neurodags tui pipeline.yml -d alt.yml  # with datasets override
 ```
 
 ## Development

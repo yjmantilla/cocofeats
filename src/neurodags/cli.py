@@ -12,6 +12,7 @@ import pandas as pd
 
 from neurodags.datasets import get_datasets_and_mount_point_from_pipeline_configuration
 from neurodags.loaders import load_configuration
+from neurodags.loggers import configure_logging
 from neurodags.mermaid import (
     derivative_to_html,
     derivative_to_mermaid,
@@ -379,6 +380,21 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="NeuroDAGs command line interface")
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        metavar="LEVEL",
+        help="Set log verbosity (DEBUG, INFO, WARNING, ERROR). Default: INFO or $LOG_LEVEL.",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write all log events to PATH in JSONL format (one JSON object per line). "
+            "Load later with: pd.read_json(PATH, lines=True)"
+        ),
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     tui_parser = subparsers.add_parser("tui", help="Launch the Textual TUI.")
@@ -743,6 +759,11 @@ def _cmd_view(args: argparse.Namespace) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    configure_logging(
+        level=args.log_level,
+        log_file=args.log_file,
+    )
 
     if args.command == "tui":
         return _cmd_tui(args)

@@ -379,3 +379,34 @@ def test_cmd_run_passes_path_string_to_run_pipeline(dummy_pipeline):
         assert called_config == "pipeline.yml", (
             "run_pipeline must receive the path string, not the parsed dict"
         )
+
+
+# ---------------------------------------------------------------------------
+# --log-level / --log-file global flags
+# ---------------------------------------------------------------------------
+
+
+def test_log_level_flag_passed_to_configure_logging(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=pd.DataFrame()),
+        patch("neurodags.cli.configure_logging") as mock_log,
+    ):
+        assert main(["--log-level", "WARNING", "count", "pipeline.yml"]) == 0
+        mock_log.assert_called_once()
+        _, kwargs = mock_log.call_args
+        assert kwargs.get("level") == "WARNING"
+
+
+def test_log_file_flag_passed_to_configure_logging(dummy_pipeline, tmp_path):
+    cfg = dummy_pipeline["config"]
+    log_path = str(tmp_path / "run.jsonl")
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=pd.DataFrame()),
+        patch("neurodags.cli.configure_logging") as mock_log,
+    ):
+        assert main(["--log-file", log_path, "count", "pipeline.yml"]) == 0
+        _, kwargs = mock_log.call_args
+        assert kwargs.get("log_file") == log_path

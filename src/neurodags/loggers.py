@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from pathlib import Path
 
 import structlog
 
@@ -43,27 +44,35 @@ def configure_logging(
     json: bool | None = None,
     level: str | int | None = None,
     route_stdlib: bool = False,
+    log_file: str | Path | None = None,
 ) -> None:
     """
     Configure structlog and stdlib logging once.
 
-    This sets up a consistent logging pipeline for your app. By default,
-    structlog logs are rendered either as pretty console output (TTY) or JSON
-    (non-TTY / env setting). If ``route_stdlib`` is enabled, third-party logs
-    from the stdlib logging system are also rendered through the same formatter.
+    This sets up a consistent logging pipeline. By default, structlog logs are
+    rendered as pretty console output (TTY) or JSON (non-TTY). When ``log_file``
+    is provided, all events are *also* written to that file in JSONL format
+    (one JSON object per line), which can be loaded directly as a dataframe:
+
+    .. code-block:: python
+
+        import pandas as pd
+        df = pd.read_json("run.jsonl", lines=True)
 
     Parameters
     ----------
     json : bool, optional
-        Force JSON output. If ``None`` (default), JSON is used when
-        standard output is not a TTY or when the environment variable
+        Force JSON output on the console. If ``None`` (default), JSON is used
+        when stdout is not a TTY or when the environment variable
         ``LOG_FMT=json`` is set.
     level : str or int, optional
-        Global log level, e.g., ``"INFO"`` or ``logging.INFO``.
+        Global log level, e.g., ``"WARNING"`` or ``logging.WARNING``.
         Defaults to the value of ``$LOG_LEVEL`` or ``"INFO"``.
     route_stdlib : bool, optional
-        If ``True``, route stdlib logs (including third-party libraries) through
-        structlog's renderer for uniform formatting. Default is ``False``.
+        Route stdlib logs through structlog's renderer for uniform formatting.
+    log_file : str or Path, optional
+        If given, also write all log events to this file in JSONL format.
+        The file is opened in append mode.
 
     Returns
     -------
@@ -72,108 +81,110 @@ def configure_logging(
     Notes
     -----
     - This function is idempotent and returns immediately on subsequent calls.
-    - When ``route_stdlib=True``, a ``ProcessorFormatter`` is used so that
-      stdlib logs flow through structlog's renderer.
+    - When ``log_file`` is set, ``route_stdlib`` is forced to ``True`` so that
+      structlog events reach both the console and file handlers.
     """
     global _CONFIGURED
     if _CONFIGURED:
         return
 
-    # ---- defaults from environment / context ----
     if level is None:
         level = os.getenv("LOG_LEVEL", "INFO")
     level = _coerce_level(level)
 
     if json is None:
-        # Prefer JSON in non-TTY (batch/HPC/CI) or when explicitly requested
-        json = (os.getenv("LOG_FMT", "json").lower() == "json") or (not sys.stdout.isatty())
+        env_fmt = os.getenv("LOG_FMT", "").lower()
+        if env_fmt == "json":
+            json = True
+        elif env_fmt == "console":
+            json = False
+        else:
+            json = not sys.stdout.isatty()
 
-    # ---- stdlib logging baseline ----
+    if log_file is not None:
+        route_stdlib = True
+
     logging.captureWarnings(True)
     root = logging.getLogger()
     root.setLevel(level)
-
-    # Remove pre-existing handlers to avoid duplicates (e.g., notebooks or reloads)
     for h in list(root.handlers):
         root.removeHandler(h)
 
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setLevel(level)
-
     if route_stdlib:
-        # Route stdlib logs via structlog's renderer
         from structlog.stdlib import ProcessorFormatter
 
-        render = structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
+        # Shared pre-processing chain for both structlog and stdlib (foreign) events
+        shared = [
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+        ]
 
-        # stdlib -> ProcessorFormatter -> structlog renderer
-        pf = ProcessorFormatter(
-            foreign_pre_chain=[
-                structlog.contextvars.merge_contextvars,
-                structlog.stdlib.add_logger_name,
-                structlog.stdlib.add_log_level,
-                structlog.processors.TimeStamper(fmt="iso", utc=True),
-                structlog.processors.format_exc_info,
-            ],
-            processors=[render],  # final rendering happens here
+        # Console handler — pretty or JSON depending on context
+        console_render = (
+            structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
         )
-        handler.setFormatter(pf)
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(level)
+        console_handler.setFormatter(
+            ProcessorFormatter(
+                foreign_pre_chain=shared,
+                processors=[ProcessorFormatter.remove_processors_meta, console_render],
+            )
+        )
+        root.addHandler(console_handler)
 
-        # structlog pipeline hands off to the stdlib ProcessorFormatter above
+        # File handler — always JSONL
+        if log_file is not None:
+            fh = logging.FileHandler(str(log_file), mode="a", encoding="utf-8")
+            fh.setLevel(level)
+            fh.setFormatter(
+                ProcessorFormatter(
+                    foreign_pre_chain=shared,
+                    processors=[
+                        ProcessorFormatter.remove_processors_meta,
+                        structlog.processors.JSONRenderer(),
+                    ],
+                )
+            )
+            root.addHandler(fh)
+
         structlog.configure(
-            processors=[
-                structlog.contextvars.merge_contextvars,
-                structlog.stdlib.filter_by_level,
-                ProcessorFormatter.remove_processors_meta,  # hand off to stdlib formatter
-            ],
+            processors=[*shared, ProcessorFormatter.wrap_for_formatter],
             wrapper_class=structlog.make_filtering_bound_logger(level),
             logger_factory=structlog.stdlib.LoggerFactory(),
             cache_logger_on_first_use=True,
         )
     else:
-        # Simpler path: structlog renders structlog logs; stdlib logs use basic formatter
+        # Simple path: structlog renders directly to stdout; no file output.
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(level)
         handler.setFormatter(logging.Formatter("%(message)s"))
 
-        processors = [
-            structlog.contextvars.merge_contextvars,  # include contextvars if used
-            structlog.stdlib.filter_by_level,  # drop events below level early
-            structlog.processors.add_log_level,  # add 'level' field
-            structlog.processors.TimeStamper(fmt="iso", utc=True),
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,  # clean tracebacks
-            structlog.stdlib.add_logger_name,  # logger name field
-            structlog.stdlib.PositionalArgumentsFormatter(),
-        ]
         render = structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
-
         structlog.configure(
-            processors=[*processors, render],
+            processors=[
+                structlog.contextvars.merge_contextvars,
+                structlog.stdlib.filter_by_level,
+                structlog.processors.add_log_level,
+                structlog.processors.TimeStamper(fmt="iso", utc=True),
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.PositionalArgumentsFormatter(),
+                render,
+            ],
             wrapper_class=structlog.make_filtering_bound_logger(level),
             logger_factory=structlog.stdlib.LoggerFactory(),
             cache_logger_on_first_use=True,
         )
+        root.addHandler(handler)
 
-    root.addHandler(handler)
     _CONFIGURED = True
-
-    # --- Optional tips (uncomment as needed) ---------------------------------
-    # # Reduce noisy libraries when routing stdlib logs:
-    # logging.getLogger("urllib3").setLevel(logging.WARNING)
-    # logging.getLogger("asyncio").setLevel(logging.ERROR)
-    #
-    # # Toggle routing via env (call with route_stdlib=(os.getenv("LOG_ROUTE_STDLIB") == "true")):
-    # # configure_logging(route_stdlib=(os.getenv("LOG_ROUTE_STDLIB", "false").lower() == "true"))
-    #
-    # # Bind common context once (service name, version, etc.):
-    # # import structlog
-    # # structlog.contextvars.bind_contextvars(service="neurodags", version="1.2.3")
-    #
-    # # Emit JSON in local dev too:
-    # # configure_logging(json=True)
-    #
-    # # Use ultra-compact console rendering:
-    # # render = structlog.dev.ConsoleRenderer(colors=True)
-    # # (swap into the configuration above)
 
 
 def get_logger(name: str | None = None, **bind):
