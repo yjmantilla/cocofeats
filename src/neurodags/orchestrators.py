@@ -474,6 +474,125 @@ def _derivative_topo_order(config_dict: dict, derivatives: list[str]) -> list[st
     return order
 
 
+def _snapshot_pipeline_config(
+    pipeline_configuration: str | os.PathLike,
+    config_dict: dict,
+    datasets_configs: dict,
+    mount_point: Any,
+    *,
+    datasets_configuration: str | os.PathLike | None = None,
+) -> None:
+    """Copy pipeline config files into each dataset's ``derivatives_path/code/``.
+
+    Called automatically by :func:`run_pipeline` before derivative execution
+    (skipped on dry runs and when ``pipeline_configuration`` is a dict).
+
+    Copied files
+    ------------
+    - The pipeline YAML itself.
+    - Any ``new_definitions`` Python file(s) listed in the pipeline config.
+    - The ``datasets`` YAML (resolved from ``datasets_configuration`` override
+      or the ``datasets:`` field of the pipeline config, if it is a path).
+
+    Additionally writes ``neurodags_env.json`` containing:
+
+    - ``snapshot_time`` — ISO-8601 UTC timestamp.
+    - ``neurodags_version`` — installed package version (if discoverable).
+    - ``neurodags_git_commit`` — HEAD commit of the neurodags source repo (if
+      the package is installed from a git checkout).
+
+    Each unique ``derivatives_path/code/`` directory receives its own copy.
+    Datasets that have no ``derivatives_path`` are silently skipped.  Any
+    per-file error is logged as a warning but never propagates — snapshot
+    failures must not block the pipeline.
+    """
+    import json
+    import shutil
+    from datetime import datetime, timezone
+
+    pipeline_path = Path(pipeline_configuration).resolve()
+    pipeline_dir = pipeline_path.parent
+
+    # ---- collect source files --------------------------------------------------
+    files_to_copy: list[Path] = [pipeline_path]
+
+    new_defs = config_dict.get("new_definitions")
+    if new_defs:
+        if isinstance(new_defs, str | os.PathLike):
+            new_defs = [new_defs]
+        elif not isinstance(new_defs, list | tuple | set):
+            new_defs = []
+        for nd in new_defs:
+            p = Path(nd)
+            if not p.is_absolute():
+                p = pipeline_dir / p
+            p = p.resolve()
+            if p.exists():
+                files_to_copy.append(p)
+
+    datasets_src = datasets_configuration or config_dict.get("datasets")
+    if isinstance(datasets_src, str | os.PathLike):
+        p = Path(datasets_src)
+        if not p.is_absolute():
+            p = pipeline_dir / p
+        p = p.resolve()
+        if p.exists():
+            files_to_copy.append(p)
+
+    # ---- neurodags version info ------------------------------------------------
+    version_info: dict = {"snapshot_time": datetime.now(timezone.utc).isoformat()}
+    try:
+        import importlib.metadata
+
+        version_info["neurodags_version"] = importlib.metadata.version("neurodags")
+    except Exception:
+        pass
+    try:
+        import subprocess
+
+        _repo = Path(__file__).resolve().parents[2]
+        commit = (
+            subprocess.check_output(
+                ["git", "-C", str(_repo), "rev-parse", "HEAD"],
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+            .decode()
+            .strip()
+        )
+        version_info["neurodags_git_commit"] = commit
+    except Exception:
+        pass
+
+    # ---- write to each unique derivatives_path/code/ --------------------------
+    seen_code_dirs: set[str] = set()
+    for dataset_config in datasets_configs.values():
+        if not dataset_config.derivatives_path:
+            continue
+        derivatives_path = get_path(dataset_config.derivatives_path, mount_point=mount_point)
+        code_dir = Path(derivatives_path) / "code"
+        if str(code_dir) in seen_code_dirs:
+            continue
+        seen_code_dirs.add(str(code_dir))
+        code_dir.mkdir(parents=True, exist_ok=True)
+
+        for src in files_to_copy:
+            dst = code_dir / src.name
+            try:
+                shutil.copy2(src, dst)
+                log.debug("Snapshotted config file", src=str(src), dst=str(dst))
+            except Exception as exc:
+                log.warning("Failed to snapshot config file", src=str(src), error=str(exc))
+
+        env_path = code_dir / "neurodags_env.json"
+        try:
+            with open(env_path, "w") as fh:
+                json.dump(version_info, fh, indent=2)
+            log.debug("Wrote neurodags_env.json", path=str(env_path))
+        except Exception as exc:
+            log.warning("Failed to write neurodags_env.json", error=str(exc))
+
+
 def run_pipeline(
     pipeline_configuration: dict | str,
     datasets_configuration: dict | str | None = None,
@@ -529,6 +648,21 @@ def run_pipeline(
         if isinstance(pipeline_configuration, str | os.PathLike)
         else pipeline_configuration
     )
+
+    if not dry_run and isinstance(pipeline_configuration, str | os.PathLike):
+        try:
+            _ds_configs, _mount = get_datasets_and_mount_point_from_pipeline_configuration(
+                pipeline_configuration, datasets_input=datasets_configuration
+            )
+            _snapshot_pipeline_config(
+                pipeline_configuration,
+                config,
+                _ds_configs,
+                _mount,
+                datasets_configuration=datasets_configuration,
+            )
+        except Exception as _snap_err:
+            log.warning("Config snapshot failed — pipeline continues", error=str(_snap_err))
 
     if derivatives is None:
         derivatives = config.get("DerivativeList", [])
