@@ -628,6 +628,14 @@ def build_derivative_dataframe(
         )
         return pd.DataFrame()
 
+    # Load custom node definitions so save=False derivatives using custom nodes work.
+    _new_defs = config_dict.get("new_definitions")
+    if _new_defs:
+        _is_path = isinstance(pipeline_configuration, str | os.PathLike)
+        _base = Path(pipeline_configuration).resolve().parent if _is_path else Path.cwd()
+        _paths = [_new_defs] if isinstance(_new_defs, str | os.PathLike) else list(_new_defs)
+        load_node_definitions(_paths, base_dir=_base)
+
     register_derivatives_from_dict(config_dict)
 
     derivative_definitions: dict[str, dict] = config_dict.get("DerivativeDefinitions", {}) or {}
