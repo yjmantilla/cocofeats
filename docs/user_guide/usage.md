@@ -64,6 +64,37 @@ neurodags run pipeline.yml --skip-errors          # skip files that already have
 neurodags run pipeline.yml --raise-on-error       # stop immediately on first failure
 ```
 
+**Config snapshot (automatic provenance):**
+
+Every `neurodags run` call automatically copies the pipeline configuration files into a
+`code/` subdirectory inside each dataset's `derivatives_path` before any derivatives are
+executed.  This gives you a record of exactly what was run and with which version of the
+pipeline.
+
+Files written to `derivatives_path/code/`:
+
+| File | Description |
+|------|-------------|
+| `<pipeline>.yml` | The pipeline YAML passed to `run` |
+| `<new_definitions>.py` | Any `new_definitions:` Python file(s) listed in the pipeline |
+| `<datasets>.yml` | The resolved datasets YAML (from the pipeline or `-d` override) |
+| `neurodags_env.json` | Installed neurodags version, git commit of the source repo (if available), and UTC timestamp |
+
+Example `neurodags_env.json`:
+
+```json
+{
+  "snapshot_time": "2026-05-21T08:00:00.000000+00:00",
+  "neurodags_version": "0.1.0",
+  "neurodags_git_commit": "a1b2c3d4..."
+}
+```
+
+The snapshot runs unconditionally and overwrites any prior snapshot in `code/` — it always
+reflects the config that was active for the most recent `run` call.  Snapshot failures
+(e.g. read-only filesystem) are logged as warnings and never block derivative execution.
+The snapshot is **skipped** for `neurodags dry-run`.
+
 See {doc}`parallelism` for full details on parallel execution and error handling.
 
 ## Dry Run
