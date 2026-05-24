@@ -106,6 +106,47 @@ new_definitions:
 
 Paths relative to the pipeline YAML. Each module is imported once before any derivative executes.
 
+## Splitting Definitions Across Files
+
+For large projects, split nodes by domain (e.g. `nodes_preprocessing.py`, `nodes_features.py`, `nodes_cleaning.py`) and list all files under `new_definitions`.
+
+**Cross-file imports require one extra step.** Definition files are loaded via `importlib.util.spec_from_file_location` with a unique synthetic module name, so they are not automatically findable by a plain `import`. If one definition file needs to import helpers from another, the shared file must add its own directory to `sys.path`:
+
+```python
+# nodes_utils.py  — shared helpers
+import os
+import sys
+
+# Make this directory importable by other definition files
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+def _to_nc_writer(da):
+    return lambda path, obj=da: obj.to_netcdf(path)
+```
+
+Then any other definition file loaded after it can import normally:
+
+```python
+# nodes_features.py
+import nodes_utils
+
+_to_nc_writer = nodes_utils._to_nc_writer
+
+@register_node
+def my_feature(data) -> NodeResult:
+    result = compute(data)
+    return NodeResult(artifacts={".nc": Artifact(item=result, writer=_to_nc_writer(result))})
+```
+
+```yaml
+new_definitions:
+  - nodes_utils.py      # must come first — adds directory to sys.path
+  - nodes_features.py
+  - nodes_cleaning.py
+```
+
+The shared file must appear first in `new_definitions` so `sys.path` is patched before the files that import from it are loaded.
+
 ## Using Custom Nodes in Derivatives
 
 ```yaml
