@@ -65,7 +65,7 @@ def split_by_condition(epochs) -> NodeResult:
     return NodeResult(artifacts=artifacts)
 ```
 
-Downstream derivatives select one artifact using the `derivative: SplitterName.condA.fif` syntax in the pipeline YAML (see [pipeline_yaml.md — Reuse Step](../pipeline_yaml.md)). The selection is applied identically whether the splitter's output is already cached on disk or is still in memory from the current run.
+Downstream derivatives select one artifact using the `derivative: SplitterName.condA.fif` syntax in the pipeline YAML (see [pipeline_yaml.md — Reuse Step](./pipeline_yaml.md)). The selection is applied identically whether the splitter's output is already cached on disk or is still in memory from the current run.
 
 ## Pipeline Steps
 
