@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Sub-derivative cache respected when parent has `overwrite: True`**: previously,
+  a derivative with `overwrite: True` forced `cached_here = False` for all of its
+  sub-derivative inputs, causing them to re-execute even when they had `overwrite: False`
+  and valid cached files on disk.  The cache check now uses the *child* derivative's own
+  `overwrite` flag rather than the parent's, so only the derivative that explicitly sets
+  `overwrite: True` is recomputed.  (`dag.run_derivative`)
+
+- **`{"cached": [...]}` dict no longer leaks into node arguments**: when a sub-derivative
+  early-returns its internal `{"cached": [path, ...]}` sentinel (e.g. because it hit its
+  own cache), the parent previously stored that dict raw in `store[sid]` and passed it
+  on to downstream node functions as if it were a real value — causing `AttributeError`
+  at runtime.  The parent now resolves the cached dict to the matching path string before
+  storing, so downstream nodes always receive a proper path or `NodeResult`.
+  (`dag.run_derivative`)
+
 ### Added
 
 - **Dataset-level variables (`vars:`)**: dataset entries in `datasets.yml` can now

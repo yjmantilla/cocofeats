@@ -391,7 +391,15 @@ def run_derivative(
                 continue
 
             # normal execution path
-            cached_here = (len(candidates) > 0) and not overwrite
+            # Use the child derivative's own overwrite flag, not the parent's.
+            # A parent with overwrite=True should recompute its own node, but
+            # should still respect a child's overwrite=False (i.e. use its cache).
+            child_overwrite = overwrite  # fallback: honour parent flag for unknown children
+            if base_name in list_derivative_definitions():
+                child_overwrite = bool(
+                    get_derivative_definition(base_name).definition.get("overwrite", False)
+                )
+            cached_here = (len(candidates) > 0) and not child_overwrite
             if cached_here:
                 log.debug(
                     "Using cached derivative",
@@ -428,7 +436,24 @@ def run_derivative(
                     mount_point=mount_point,
                     dry_run=False,
                 )
-                # sub-derivative may return None if already cached
+                # If the sub-derivative early-returned its cached-file dict
+                # ({"cached": [path, ...]}) instead of a NodeResult, resolve it
+                # to the matching path so downstream nodes receive a plain path
+                # string rather than the internal bookkeeping dict.
+                if isinstance(sub_result, dict) and "cached" in sub_result:
+                    cached_paths = sub_result["cached"]
+                    if ext:
+                        filtered = [p for p in cached_paths if p.endswith("." + ext)]
+                        store[sid] = (
+                            filtered[0]
+                            if filtered
+                            else (cached_paths[0] if cached_paths else sub_result)
+                        )
+                    else:
+                        store[sid] = cached_paths[0] if cached_paths else sub_result
+                    last_result = last_result  # cached sub-derivative; last_result unchanged
+                    continue
+
                 # If a specific artifact suffix was requested (e.g. "derivative:
                 # Splitter.condA.fif"), narrow the in-memory NodeResult to just
                 # that artifact so downstream nodes receive the right object.
