@@ -4,6 +4,24 @@ from . import register_node
 
 
 @register_node
+def dummy_multi(keys: list | None = None) -> NodeResult:
+    """Return one artifact per key, for testing multi-artifact in-memory selection.
+
+    Each artifact item is the key string; writer writes the key to a text file.
+    Default keys: ["alpha", "beta"].
+    """
+    if keys is None:
+        keys = ["alpha", "beta"]
+    artifacts = {}
+    for key in keys:
+        artifacts[f".{key}.txt"] = Artifact(
+            item=key,
+            writer=lambda path, k=key: open(path, "w").write(k),
+        )
+    return NodeResult(artifacts=artifacts)
+
+
+@register_node
 def dummy(param1=None, param2=None) -> NodeResult:
     """
     A dummy derivative extraction function that returns a simple message.

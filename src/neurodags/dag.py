@@ -392,6 +392,24 @@ def run_derivative(
                     dry_run=False,
                 )
                 # sub-derivative may return None if already cached
+                # If a specific artifact suffix was requested (e.g. "derivative:
+                # Splitter.condA.fif"), narrow the in-memory NodeResult to just
+                # that artifact so downstream nodes receive the right object.
+                # This mirrors the on-disk filter already applied via
+                # `candidates = [p for p in candidates if p.endswith("." + ext)]`.
+                if isinstance(sub_result, NodeResult) and ext:
+                    target = "." + ext
+                    if target in sub_result.artifacts:
+                        sub_result = NodeResult(artifacts={target: sub_result.artifacts[target]})
+                    else:
+                        log.warning(
+                            "Artifact suffix not found in sub-derivative; "
+                            "passing full NodeResult",
+                            requested_suffix=target,
+                            available=list(sub_result.artifacts.keys()),
+                            parent_derivative=derivative_name,
+                            child_derivative=derivative_ref,
+                        )
                 store[sid] = sub_result
                 last_result = sub_result if isinstance(sub_result, NodeResult) else last_result
             else:

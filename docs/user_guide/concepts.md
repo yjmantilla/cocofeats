@@ -49,12 +49,30 @@ class NodeResult(NamedTuple):
 
 A node returns one or more artifacts keyed by file extension. Example: `{".nc": Artifact(...), ".report.html": Artifact(...)}`. The last node in a derivative's chain saves under the `@DerivativeName` prefix.
 
+### Multi-Artifact (Splitter) Nodes
+
+A node can return several artifacts in one `NodeResult`, each under a distinct extension key. This is the **splitter** pattern: one artifact per condition, segment type, or split key.
+
+```python
+@register_node
+def split_by_condition(epochs) -> NodeResult:
+    artifacts = {}
+    for cond in epochs.event_id:
+        artifacts[f".{cond}.fif"] = Artifact(
+            item=epochs[cond],
+            writer=lambda path, e=epochs[cond]: e.save(path, overwrite=True),
+        )
+    return NodeResult(artifacts=artifacts)
+```
+
+Downstream derivatives select one artifact using the `derivative: SplitterName.condA.fif` syntax in the pipeline YAML (see [pipeline_yaml.md — Reuse Step](../pipeline_yaml.md)). The selection is applied identically whether the splitter's output is already cached on disk or is still in memory from the current run.
+
 ## Pipeline Steps
 
 Each derivative definition has a `nodes` list. A step is either:
 
 - **`node`**: execute a registered Python function
-- **`derivative`**: load a cached derivative from disk (enables reuse without recomputing)
+- **`derivative`**: resolve an upstream derivative by name and optional extension; if the upstream is a splitter, `derivative: Name.condA.fif` selects a single artifact
 
 Steps reference earlier results via `id.<N>` (e.g., `id.0` = result of step 0).
 

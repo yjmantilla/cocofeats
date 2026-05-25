@@ -4,6 +4,18 @@
 
 ### Added
 
+- **In-memory multi-artifact selection**: when a node returns a `NodeResult` with
+  multiple artifacts (e.g. a splitter that produces one artifact per condition),
+  downstream derivatives can now select a specific artifact using the existing
+  dot-extension syntax — `derivative: SplitterName.condA.fif` — even when the
+  splitter has not yet been written to disk.  Previously this selection only worked
+  for on-disk (cached) artifacts; the in-memory path passed the full `NodeResult`
+  and relied on the `_unwrap_for_arg` heuristic, which returned the first matching
+  artifact regardless of the requested suffix.  The fix applies the same suffix
+  filter to the in-memory `NodeResult` that was already applied to on-disk
+  candidates, making both paths consistent.  A warning is logged when the requested
+  suffix is absent from the splitter's artifacts.  (`dag.run_derivative`)
+
 - **Config snapshot on `neurodags run`**: before executing any derivatives, the pipeline
   YAML, `new_definitions` file(s), and datasets YAML are copied to
   `derivatives_path/code/`.  A `neurodags_env.json` file is also written with the

@@ -90,19 +90,54 @@ Each entry in `nodes` is a step with a unique `id`. Steps execute in topological
 - `node`: name of a registered node function
 - `args`: keyword arguments passed to the node; values of the form `id.<N>` resolve to the artifact produced by step `N`
 
-#### Reuse Step (load derivative from disk)
+#### Reuse Step (load derivative from disk or in-memory)
 
 ```yaml
 - id: 0
   derivative: CleanedEEG.fif
 ```
 
-- `derivative`: `<DerivativeName>.<ext>` — loads the named derivative for the current file from disk
+- `derivative`: `<DerivativeName>.<ext>` — resolves the named derivative for the current file
 - Use `SourceFile` to load the raw input file
+
+If the upstream derivative is already cached on disk, the matching file is loaded. If the upstream derivative has not yet been written (it is being computed in the same run), the in-memory `NodeResult` is used directly — both paths produce identical results.
+
+##### Selecting one artifact from a multi-artifact derivative
+
+When an upstream derivative is a **splitter** — a node that returns one artifact per condition, segment type, or split key — the same `<DerivativeName>.<ext>` syntax selects a specific artifact:
+
+```yaml
+- id: 0
+  derivative: EpochSplitter.EO_baseline.fif   # selects only the EO_baseline artifact
+```
+
+This works whether `EpochSplitter` is cached on disk or in memory.  If the requested extension is absent from the upstream derivative's artifacts, a warning is logged and the full `NodeResult` is passed as a fallback.
+
+```yaml
+# Splitter example
+DerivativeDefinitions:
+  EpochSplitter:
+    nodes:
+      - id: 0
+        derivative: SourceFile
+      - id: 1
+        node: split_by_condition    # returns .EO_baseline.fif, .EC_baseline.fif, …
+        args:
+          mne_object: id.0
+
+  EO_Features:
+    nodes:
+      - id: 0
+        derivative: EpochSplitter.EO_baseline.fif   # only EO_baseline epochs
+      - id: 1
+        node: compute_features
+        args:
+          epochs: id.0
+```
 
 #### id.N References
 
-`id.<N>` in args resolves to the output of step `N`. When a step produces multiple artifacts (multiple extensions), the first artifact is returned unless the extension is specified.
+`id.<N>` in args resolves to the output of step `N`. When a step produces multiple artifacts, the artifact matching the node's expected argument type is selected by the `_unwrap_for_arg` heuristic (first `.fif` for MNE objects, first artifact otherwise). To select a specific artifact from a multi-artifact upstream derivative, use the `derivative: Name.ext` reuse step (see above) rather than relying on `id.<N>` heuristics.
 
 ---
 
