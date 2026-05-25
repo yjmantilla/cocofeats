@@ -145,3 +145,37 @@ my_dataset:
 ```
 
 This makes pipelines portable across workstations and HPC clusters without editing the pipeline YAML.
+
+## Dataset Variables (`vars`)
+
+Dataset entries can declare a `vars:` block. Any pipeline node arg whose string value matches `$identifier` is substituted with the corresponding value at runtime.
+
+```yaml
+# datasets.yml
+eeg_study_EO:
+  file_pattern: { local: data/**/*@CleanedPrepRaw.fif }
+  derivatives_path: { local: outputs/features/EO_baseline }
+  vars:
+    condition_name: EO_baseline
+    epoch_duration: 2.0
+```
+
+```yaml
+# pipeline.yml
+CleanedPrep:
+  save: False
+  nodes:
+    - id: 0
+      derivative: SourceFile
+    - id: 1
+      node: extract_condition_epochs
+      args:
+        condition_name: $condition_name   # resolved from active dataset entry
+        epoch_duration: $epoch_duration
+```
+
+The substitution runs after `id.N` reference resolution and before node invocation. Only whole-string values are substituted — embedded `$` in paths or other strings is ignored. Variables can be any YAML scalar or collection type (string, int, float, bool, list).
+
+**Key benefit**: the dataset entry becomes the single source of truth for a run. Switching the active entry (via `skip: true/false`) changes both `derivatives_path` and all `$var_name` args simultaneously — no pipeline YAML edits needed.
+
+See [datasets_yaml.md](datasets_yaml.md) for full reference including multi-site and cohort-specific use cases.

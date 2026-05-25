@@ -35,6 +35,7 @@ from neurodags.utils import snake_to_camel
 
 log = get_logger(__name__)
 _ID_REF = re.compile(r"^id\.(\d+)$")
+_VAR_REF = re.compile(r"^\$([A-Za-z_][A-Za-z0-9_]*)$")
 
 # ---------- helpers ----------
 
@@ -54,6 +55,36 @@ def _resolve_refs(obj: Any, store: dict[int, Any]) -> Any:
     if isinstance(obj, list | tuple):
         t = type(obj)
         return t(_resolve_refs(v, store) for v in obj)
+    return obj
+
+
+def _resolve_vars(obj: Any, vars_dict: dict[str, Any]) -> Any:
+    """Substitute $var_name references using dataset-level vars.
+
+    Only whole-string values matching ``$identifier`` are substituted.
+    Partial matches (e.g. embedded ``$`` in a path) are left untouched.
+    NodeResult values are passed through unchanged (they are runtime objects,
+    not YAML strings, and must not be iterated as tuples).
+    """
+    if isinstance(obj, NodeResult):
+        return obj
+    if isinstance(obj, str):
+        m = _VAR_REF.match(obj)
+        if m:
+            key = m.group(1)
+            if key not in vars_dict:
+                raise KeyError(
+                    f"Dataset var '${key}' referenced in pipeline args but not defined "
+                    f"in the active dataset entry's 'vars:' block. "
+                    f"Available vars: {sorted(vars_dict)}"
+                )
+            return vars_dict[key]
+        return obj
+    if isinstance(obj, dict):
+        return {k: _resolve_vars(v, vars_dict) for k, v in obj.items()}
+    if isinstance(obj, list | tuple):
+        t = type(obj)
+        return t(_resolve_vars(v, vars_dict) for v in obj)
     return obj
 
 
@@ -92,8 +123,14 @@ def _unwrap_for_arg(val: Any, argname: str) -> Any:
     return val
 
 
-def _prep_kwargs(raw_kwargs: dict[str, Any], store: dict[int, Any]) -> dict[str, Any]:
+def _prep_kwargs(
+    raw_kwargs: dict[str, Any],
+    store: dict[int, Any],
+    vars_dict: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     resolved = _resolve_refs(raw_kwargs or {}, store)
+    if vars_dict is not None:
+        resolved = _resolve_vars(resolved, vars_dict)
     return {k: _unwrap_for_arg(v, k) for k, v in resolved.items()}
 
 
@@ -449,7 +486,8 @@ def run_derivative(
             if "mount_point" in inspect.signature(fn).parameters:
                 extra_args["mount_point"] = mount_point
 
-            kwargs = _prep_kwargs(step.get("args", {}), store)
+            _vars = dataset_config.vars if dataset_config is not None else None
+            kwargs = _prep_kwargs(step.get("args", {}), store, vars_dict=_vars)
             log.debug(
                 "Execute node", derivative=derivative_name, id=sid, node=node_name, kwargs=kwargs
             )

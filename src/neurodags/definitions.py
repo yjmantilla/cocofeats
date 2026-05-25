@@ -16,6 +16,9 @@ class DatasetConfig(BaseModel):
     exclude_pattern: str | None = None
     skip: bool = False
     derivatives_path: str | dict[str, str] | None = None
+    vars: dict[str, Any] | None = (
+        None  # dataset-level variables; referenced as $var_name in pipeline node args
+    )
 
     class Config:
         extra = "allow"  # allow arbitrary extra fields for user flexibility

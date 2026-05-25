@@ -4,6 +4,19 @@
 
 ### Added
 
+- **Dataset-level variables (`vars:`)**: dataset entries in `datasets.yml` can now
+  declare a `vars:` block of arbitrary key-value pairs.  Any pipeline node arg whose
+  string value matches `$identifier` is substituted with the corresponding value from
+  the active dataset entry's `vars` at runtime, after `id.N` reference resolution.
+  Only whole-string values are substituted — embedded `$` in paths or other strings
+  is left untouched.  Variables may be any YAML type (string, int, float, bool,
+  list).  Referencing an undefined variable raises `KeyError` with the list of
+  available vars.  Primary use case: encoding a condition name (or any
+  dataset-specific parameter) in the dataset entry so that activating a different
+  entry changes both `derivatives_path` and pipeline behaviour in one step, with no
+  pipeline YAML edits required.  (`definitions.DatasetConfig.vars`,
+  `dag._resolve_vars`, `dag._prep_kwargs`)
+
 - **In-memory multi-artifact selection**: when a node returns a `NodeResult` with
   multiple artifacts (e.g. a splitter that produces one artifact per condition),
   downstream derivatives can now select a specific artifact using the existing
