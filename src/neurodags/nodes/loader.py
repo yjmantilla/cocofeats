@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from types import ModuleType
@@ -54,6 +55,13 @@ def load_node_definitions(
             raise ImportError(f"Could not load node definitions from {resolved}")
 
         module = importlib.util.module_from_spec(spec)
+        # Register before exec so that intra-package imports (e.g. `import nodes_utils`
+        # inside nodes_aggregation.py) resolve to the already-executing module rather
+        # than re-loading it from sys.path and double-registering nodes.
+        sys.modules[module_name] = module
+        stem = resolved.stem
+        if stem not in sys.modules:
+            sys.modules[stem] = module
         log.info("Loading custom node definitions", path=str(resolved))
         spec.loader.exec_module(module)  # type: ignore[assignment]
         _LOADED_SOURCES.add(resolved)
