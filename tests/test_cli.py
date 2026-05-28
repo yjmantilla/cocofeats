@@ -302,7 +302,20 @@ def test_status_prints_summary_table(dummy_pipeline, capsys):
     assert "Total" in out
 
 
-def test_status_exit_0_when_no_errors(dummy_pipeline, capsys):
+def test_status_exit_0_when_complete(dummy_pipeline, capsys):
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "a.vhdr", "plan": _make_plan(cached=True, has_error=False)},
+        {"derivative": "BasicPrep", "file_path": "b.vhdr", "plan": _make_plan(cached=True, has_error=False)},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        assert main(["status", "pipeline.yml"]) == 0
+
+
+def test_status_exit_1_when_missing(dummy_pipeline, capsys):
     cfg = dummy_pipeline["config"]
     fake_df = _status_df([
         {"derivative": "BasicPrep", "file_path": "a.vhdr", "plan": _make_plan(cached=True, has_error=False)},
@@ -312,7 +325,7 @@ def test_status_exit_0_when_no_errors(dummy_pipeline, capsys):
         patch("neurodags.cli._load_pipeline_config", return_value=cfg),
         patch("neurodags.cli.run_pipeline", return_value=fake_df),
     ):
-        assert main(["status", "pipeline.yml"]) == 0
+        assert main(["status", "pipeline.yml"]) == 1
 
 
 def test_status_list_errors_prints_file_paths(dummy_pipeline, capsys):
@@ -356,6 +369,28 @@ def test_status_no_list_errors_hint_shown(dummy_pipeline, capsys):
         main(["status", "pipeline.yml"])
     out = capsys.readouterr().out
     assert "--list-errors" in out
+
+
+def test_status_format_json(dummy_pipeline, capsys):
+    import json
+
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df([
+        {"derivative": "BasicPrep", "file_path": "a.vhdr", "plan": _make_plan(cached=True, has_error=False)},
+        {"derivative": "BasicPrep", "file_path": "b.vhdr", "plan": _make_plan(cached=False, has_error=False)},
+    ])
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        rc = main(["status", "pipeline.yml", "--format", "json"])
+    out = capsys.readouterr().out
+    data = json.loads(out)
+    assert rc == 1  # missing → incomplete
+    assert data["complete"] is False
+    assert data["grand_total"]["missing"] == 1
+    assert data["grand_total"]["done"] == 1
+    assert "BasicPrep" in data["derivatives"]
 
 
 def test_status_njobs_passed_to_run_pipeline(dummy_pipeline, capsys):

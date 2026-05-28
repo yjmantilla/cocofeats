@@ -254,7 +254,13 @@ EOF
 
 
 def _status_classify(plan: list) -> str:
-    """Return 'done', 'missing', 'errored', 'no-save', or 'unknown' from a dry-run plan list."""
+    """Return 'done', 'missing', 'errored', 'no-save', or 'unknown' from a dry-run plan list.
+
+    'done' means at least one artifact file matching the derivative prefix exists on disk.
+    It does NOT verify that all artifact files are present — a derivative that produces
+    multiple artifacts (multiple keys in NodeResult.artifacts) will show as 'done' even
+    if only one of those files was written (e.g. after a partial failure).
+    """
     if not isinstance(plan, list):
         return "unknown"
     final = next((s for s in plan if s.get("kind") == "derivative_output"), None)
@@ -305,12 +311,45 @@ def _cmd_status(args: argparse.Namespace) -> int:
             }
         )
 
+    import json
+
     import pandas as pd
 
     status_df = pd.DataFrame(rows)
     all_derivs = sorted(status_df["derivative"].unique())
     total_files = status_df["file_path"].nunique()
 
+    grand = {"total": 0, "done": 0, "missing": 0, "errored": 0}
+    per_deriv: dict[str, dict[str, int]] = {}
+
+    for deriv in all_derivs:
+        sub = status_df[status_df["derivative"] == deriv]
+        counts = sub["status"].value_counts()
+        total = len(sub)
+        done = int(counts.get("done", 0))
+        missing = int(counts.get("missing", 0))
+        errored = int(counts.get("errored", 0))
+        per_deriv[deriv] = {"total": total, "done": done, "missing": missing, "errored": errored}
+        for k, v in (("total", total), ("done", done), ("missing", missing), ("errored", errored)):
+            grand[k] += v
+
+    complete = grand["missing"] == 0 and grand["errored"] == 0
+    exit_code = 0 if complete else 1
+
+    fmt = getattr(args, "format", "table")
+
+    if fmt == "json":
+        payload = {
+            "config": args.config,
+            "n_files": total_files,
+            "derivatives": per_deriv,
+            "grand_total": grand,
+            "complete": complete,
+        }
+        print(json.dumps(payload, indent=2))
+        return exit_code
+
+    # --- table output ---
     col_w = max(24, max(len(d) for d in all_derivs) + 2)
     header = f"{'Derivative':<{col_w}} {'total':>6}  {'done':>6}  {'missing':>8}  {'errored':>8}"
     sep = "─" * len(header)
@@ -321,32 +360,33 @@ def _cmd_status(args: argparse.Namespace) -> int:
     print(header)
     print(sep)
 
-    grand = {"total": 0, "done": 0, "missing": 0, "errored": 0}
-    has_errors = False
-
     for deriv in all_derivs:
-        sub = status_df[status_df["derivative"] == deriv]
-        counts = sub["status"].value_counts()
-        total = len(sub)
-        done = int(counts.get("done", 0))
-        missing = int(counts.get("missing", 0))
-        errored = int(counts.get("errored", 0))
-        for k, v in (("total", total), ("done", done), ("missing", missing), ("errored", errored)):
-            grand[k] += v
-        if errored:
-            has_errors = True
-        print(f"{deriv:<{col_w}} {total:>6}  {done:>6}  {missing:>8}  {errored:>8}")
+        c = per_deriv[deriv]
+        print(
+            f"{deriv:<{col_w}} {c['total']:>6}  {c['done']:>6}  {c['missing']:>8}  {c['errored']:>8}"
+        )
 
     print(sep)
     print(
         f"{'Total':<{col_w}} {grand['total']:>6}  {grand['done']:>6}"
         f"  {grand['missing']:>8}  {grand['errored']:>8}"
     )
+    print(
+        "\nNote: 'total' counts (derivative x source-file) pairs, not output files. "
+        "'done' means ≥1 artifact file exists — a derivative that writes multiple files "
+        "per source file may show 'done' even after a partial write."
+    )
 
-    if has_errors:
+    if grand["errored"]:
         print(f"\n{grand['errored']} error(s) found.", end="")
         if not args.list_errors:
             print("  Run with --list-errors for details.", end="")
+        print()
+
+    if grand["missing"] and not complete:
+        print(f"{grand['missing']} derivative(s) missing.", end="")
+        if not args.list_missing:
+            print("  Run with --list-missing for details.", end="")
         print()
 
     if args.list_errors:
@@ -375,7 +415,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
                 for _, row in sub.iterrows():
                     print(f"    {row['file_path']}")
 
-    return 1 if has_errors else 0
+    return exit_code
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -564,6 +604,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Number of parallel workers for the underlying dry-run. Same semantics as 'run'.",
+    )
+    status_parser.add_argument(
+        "--format",
+        choices=("table", "json"),
+        default="table",
+        help="Output format: 'table' (default) or 'json'.",
     )
 
     slurm_parser = subparsers.add_parser(

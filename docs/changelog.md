@@ -21,6 +21,16 @@
 
 ### Changed
 
+- **`neurodags status` exit code**: now exits `1` when any derivatives are missing or errored
+  (previously only errored triggered a non-zero exit). Enables use in CI and shell dependency
+  chains: `neurodags status pipeline.yml || sbatch resubmit.sh`.
+
+- **`neurodags status --format json`**: new flag emits machine-readable JSON with `config`,
+  `n_files`, per-derivative counts, `grand_total`, and `complete` boolean. Useful for scripted
+  post-cluster checks and quota estimation.
+
+### Changed
+
 - **`neurodags count` renamed to `neurodags count-inputs`**: clarifies that the command
   counts source (input) files the pipeline will process, not output files or derivative
   instances. One input file may produce multiple output files depending on the derivatives.
