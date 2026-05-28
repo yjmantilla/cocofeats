@@ -237,6 +237,9 @@ def register_derivatives_from_yaml(yaml_path: str) -> list[str]:
 
 
 def _artifact_candidates_for(prefix: str) -> list[str]:
+    # Returns all non-error files matching prefix.*. Used by the dry-run plan to set
+    # cached=True when any artifact exists. Does NOT guarantee all expected artifact files
+    # are present — a derivative that writes N files shows as cached after only 1 is written.
     # TODO: How to add option to skip derivatives that previously failed? (.error files)
     return [x for x in sorted(glob.glob(prefix + ".*")) if not x.endswith(".error")]
 
