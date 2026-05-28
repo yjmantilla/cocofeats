@@ -12,6 +12,7 @@ The patch makes it work identically for in-memory (uncached) results.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -259,3 +260,143 @@ def test_in_memory_and_disk_selection_agree(tmp_path, registered_pipeline):
     disk_msg = result_disk.artifacts[".message.txt"].item
     assert "beta" in inmem_msg
     assert "beta" in disk_msg
+
+
+# ---------------------------------------------------------------------------
+# Child overwrite flag: parent overwrite=True must not force child to re-run
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "registered_pipeline",
+    [_pipeline_cfg(["alpha", "beta"], "alpha.txt")],
+    indirect=True,
+)
+def test_child_overwrite_false_respected_when_parent_overwrite_true(tmp_path, registered_pipeline):
+    """Consumer(overwrite=True) must honour MultiSplitter(overwrite=False): cached child not re-run."""
+    cfg = registered_pipeline
+    ref = _ref_base(tmp_path)
+
+    # Pre-cache MultiSplitter artifacts on disk
+    run_derivative(
+        cfg["DerivativeDefinitions"]["MultiSplitter"],
+        derivative_name="MultiSplitter",
+        file_path="input.vhdr",
+        reference_base=ref,
+    )
+    alpha_path = Path(f"{ref}@MultiSplitter.alpha.txt")
+    assert alpha_path.exists()
+    orig_mtime = alpha_path.stat().st_mtime
+
+    # Consumer with overwrite=True; MultiSplitter stays overwrite=False
+    cfg_consumer_overwrite = {
+        **cfg,
+        "DerivativeDefinitions": {
+            **cfg["DerivativeDefinitions"],
+            "Consumer": {**cfg["DerivativeDefinitions"]["Consumer"], "overwrite": True},
+        },
+    }
+    register_derivatives_from_dict(cfg_consumer_overwrite)
+
+    result = run_derivative(
+        cfg_consumer_overwrite["DerivativeDefinitions"]["Consumer"],
+        derivative_name="Consumer",
+        file_path="input.vhdr",
+        reference_base=ref,
+    )
+
+    # Child artifacts must not be re-written
+    assert alpha_path.stat().st_mtime == orig_mtime
+    # Consumer still produces a valid result using the cached child artifact
+    assert isinstance(result, NodeResult)
+    assert "alpha" in result.artifacts[".message.txt"].item
+
+
+@pytest.mark.parametrize(
+    "registered_pipeline",
+    [_pipeline_cfg(["alpha", "beta"], "alpha.txt")],
+    indirect=True,
+)
+def test_cached_dict_resolved_when_ext_not_in_child_artifacts(tmp_path, registered_pipeline):
+    """When Consumer requests a suffix that child never produced, the cached-dict path resolves
+    to the first available cached artifact without raising."""
+    cfg = registered_pipeline
+    ref = _ref_base(tmp_path)
+
+    # Pre-cache MultiSplitter (produces alpha.txt and beta.txt, not gamma.txt)
+    run_derivative(
+        cfg["DerivativeDefinitions"]["MultiSplitter"],
+        derivative_name="MultiSplitter",
+        file_path="input.vhdr",
+        reference_base=ref,
+    )
+
+    # Consumer requests .gamma.txt — an artifact that MultiSplitter never produces.
+    # Outer ext-filter → candidates=[] → cached_here=False → recurse into child.
+    # Child has overwrite=False and its own artifacts are cached → returns {"cached": [...]}.
+    # The new code must resolve that dict without raising.
+    gamma_consumer_def = {
+        "overwrite": False,
+        "nodes": [
+            {"id": 0, "derivative": "MultiSplitter.gamma.txt"},
+            {"id": 1, "node": "dummy", "args": {"param1": "id.0"}},
+        ],
+    }
+    cfg["DerivativeDefinitions"]["GammaConsumer"] = gamma_consumer_def
+    register_derivatives_from_dict(cfg)
+    try:
+        result = run_derivative(
+            gamma_consumer_def,
+            derivative_name="GammaConsumer",
+            file_path="input.vhdr",
+            reference_base=ref,
+        )
+        assert isinstance(result, NodeResult)
+    finally:
+        unregister_derivative("GammaConsumer")
+
+
+def test_cached_dict_no_ext_resolved_to_first_path(tmp_path):
+    """No-ext branch of the cached-dict handler: sub-derivative returns {"cached": [path1, ...]}
+    and the resolved store entry is path1 (a string), not the raw dict."""
+    fake_cached_path = str(tmp_path / "subject@Child.txt")
+    Path(fake_cached_path).write_text("content")
+
+    consumer_def = {
+        "overwrite": True,  # bypass Consumer's own early-return
+        "save": False,
+        "nodes": [
+            {"id": 0, "derivative": "Child"},  # no ext → else branch in cached-dict handler
+            {"id": 1, "node": "dummy", "args": {"param1": "id.0"}},
+        ],
+    }
+    child_def = {"overwrite": False, "nodes": [{"id": 0, "node": "dummy", "args": {}}]}
+
+    from neurodags.derivatives import register_derivative_with_name
+    register_derivative_with_name("Child", lambda: None, definition=child_def)
+    try:
+        ref = tmp_path / "subject" / "sample"
+        ref.parent.mkdir(parents=True, exist_ok=True)
+
+        original_run = run_derivative
+
+        def mock_run(definition, derivative_name, *args, **kwargs):
+            if derivative_name == "Child":
+                # Simulate child early-returning its cached dict
+                return {"cached": [fake_cached_path]}
+            return original_run(definition, derivative_name, *args, **kwargs)
+
+        # _artifact_candidates_for returns [] so cached_here=False → we recurse into Child
+        with patch("neurodags.dag.run_derivative", side_effect=mock_run), \
+             patch("neurodags.dag._artifact_candidates_for", return_value=[]):
+            result = original_run(
+                consumer_def,
+                "Consumer",
+                "input.vhdr",
+                reference_base=ref,
+            )
+
+        assert isinstance(result, NodeResult)
+        # param1 should be the resolved path string, not the raw dict
+        assert fake_cached_path in result.artifacts[".message.txt"].item
+    finally:
+        unregister_derivative("Child")
