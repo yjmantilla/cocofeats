@@ -32,6 +32,34 @@ N=$(neurodags count-inputs pipeline.yml)
 sbatch --array=0-$((N - 1)) run_array.sh
 ```
 
+### Estimating output file count
+
+Clusters often enforce per-job or total output file quotas. Before submitting, estimate how many output files the pipeline will produce:
+
+```bash
+neurodags status pipeline.yml --format json
+```
+
+The JSON output contains:
+
+- `n_files` — number of source (input) files
+- `grand_total.total` — total `(derivative × source-file)` pairs across all derivatives with `save: True`
+- `grand_total.total / n_files` — estimated output files **per source file**
+
+```bash
+# estimated output files per source file and total
+neurodags status pipeline.yml --format json \
+  | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+per_file = d['grand_total']['total'] // d['n_files']
+print(f\"derivatives per file : {per_file}\")
+print(f\"estimated total files: {d['grand_total']['total']}\")
+"
+```
+
+**Caveat:** these counts are derivative instances, not actual output files. Most derivatives write exactly one file, so the estimate is reliable for typical pipelines. Derivatives that return multiple artifacts (multiple keys in `NodeResult.artifacts`) will produce more files than this estimate — inspect those nodes manually if precise quota compliance is required.
+
 ---
 
 ## per-file: One Array Task per File (All Derivatives)
