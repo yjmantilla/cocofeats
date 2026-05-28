@@ -155,7 +155,7 @@ def test_count_prints_unique_file_count(dummy_pipeline, capsys):
         patch("neurodags.cli._load_pipeline_config", return_value=cfg),
         patch("neurodags.cli.run_pipeline", return_value=fake_df),
     ):
-        assert main(["count", "pipeline.yml"]) == 0
+        assert main(["count-inputs", "pipeline.yml"]) == 0
     assert capsys.readouterr().out.strip() == "2"
 
 
@@ -165,7 +165,7 @@ def test_count_prints_zero_on_empty_result(dummy_pipeline, capsys):
         patch("neurodags.cli._load_pipeline_config", return_value=cfg),
         patch("neurodags.cli.run_pipeline", return_value=pd.DataFrame()),
     ):
-        assert main(["count", "pipeline.yml"]) == 0
+        assert main(["count-inputs", "pipeline.yml"]) == 0
     assert capsys.readouterr().out.strip() == "0"
 
 
@@ -405,7 +405,7 @@ def test_log_level_flag_passed_to_configure_logging(dummy_pipeline, capsys):
         patch("neurodags.cli.run_pipeline", return_value=pd.DataFrame()),
         patch("neurodags.cli.configure_logging") as mock_log,
     ):
-        assert main(["--log-level", "WARNING", "count", "pipeline.yml"]) == 0
+        assert main(["--log-level", "WARNING", "count-inputs", "pipeline.yml"]) == 0
         mock_log.assert_called_once()
         _, kwargs = mock_log.call_args
         assert kwargs.get("level") == "WARNING"
@@ -419,6 +419,6 @@ def test_log_file_flag_passed_to_configure_logging(dummy_pipeline, tmp_path):
         patch("neurodags.cli.run_pipeline", return_value=pd.DataFrame()),
         patch("neurodags.cli.configure_logging") as mock_log,
     ):
-        assert main(["--log-file", log_path, "count", "pipeline.yml"]) == 0
+        assert main(["--log-file", log_path, "count-inputs", "pipeline.yml"]) == 0
         _, kwargs = mock_log.call_args
         assert kwargs.get("log_file") == log_path

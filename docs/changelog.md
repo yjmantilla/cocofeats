@@ -19,6 +19,13 @@
   storing, so downstream nodes always receive a proper path or `NodeResult`.
   (`dag.run_derivative`)
 
+### Changed
+
+- **`neurodags count` renamed to `neurodags count-inputs`**: clarifies that the command
+  counts source (input) files the pipeline will process, not output files or derivative
+  instances. One input file may produce multiple output files depending on the derivatives.
+  All generated SLURM templates, documentation, and tests updated accordingly.
+
 ### Added
 
 - **Dataset-level variables (`vars:`)**: dataset entries in `datasets.yml` can now

@@ -23,12 +23,12 @@ neurodags slurm-script pipeline.yml --pattern chained --output submit_pipeline.s
 
 The `chained` pattern writes two files: `submit_pipeline.sh` (the submission script) and `run_one_derivative.sh` (the worker). Edit the `#SBATCH` resource lines before submitting.
 
-### Counting files
+### Counting source files
 
-`neurodags count` prints the number of unique files the pipeline will process — useful in submission scripts:
+`neurodags count-inputs` prints the number of unique source (input) files the pipeline will process — useful in submission scripts:
 
 ```bash
-N=$(neurodags count pipeline.yml)
+N=$(neurodags count-inputs pipeline.yml)
 sbatch --array=0-$((N - 1)) run_array.sh
 ```
 
@@ -39,7 +39,7 @@ sbatch --array=0-$((N - 1)) run_array.sh
 Each task runs all derivatives in dependency order for a single file.
 
 ```bash
-N=$(neurodags count pipeline.yml)
+N=$(neurodags count-inputs pipeline.yml)
 sbatch --array=0-$((N - 1)) run_array.sh
 ```
 
@@ -79,7 +79,7 @@ EOF
 Use this when derivatives are independent (no inter-derivative dependencies) and you want maximum parallelism.
 
 ```bash
-N=$(neurodags count pipeline.yml)
+N=$(neurodags count-inputs pipeline.yml)
 N_DERIVATIVES=3
 TOTAL=$(( N * N_DERIVATIVES ))
 sbatch --array=0-$((TOTAL - 1)) run_array_per_deriv.sh
@@ -132,7 +132,7 @@ Run derivatives one at a time in dependency order, with all files parallelised w
 #!/bin/bash
 # submit_pipeline.sh
 
-N=$(neurodags count pipeline.yml)
+N=$(neurodags count-inputs pipeline.yml)
 ARRAY="0-$((N - 1))"
 
 JOB1=$(sbatch --parsable --array=$ARRAY \

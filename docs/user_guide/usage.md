@@ -149,13 +149,13 @@ neurodags status pipeline.yml || echo "pipeline has failures"
 
 See {doc}`inspection` for status definitions and `.error` marker behaviour.
 
-## File Count
+## Source File Count
 
-Print the total number of unique input files the pipeline will process. Useful for sanity-checking datasets before a long run.
+Print the number of unique source (input) files the pipeline will process. Useful for sanity-checking datasets before a long run. Note: this counts input files, not output files — one input file may produce multiple output files depending on the derivatives.
 
 ```bash
-neurodags count pipeline.yml                          # total files across all derivatives
-neurodags count pipeline.yml --derivative CleanedEEG  # count for a specific derivative
+neurodags count-inputs pipeline.yml                          # number of source files across all derivatives
+neurodags count-inputs pipeline.yml --derivative CleanedEEG  # count for a specific derivative
 ```
 
 ## Dataframe Assembly

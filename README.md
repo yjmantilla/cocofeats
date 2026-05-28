@@ -130,11 +130,11 @@ neurodags status pipeline.yml --n-jobs 4             # parallelize underlying dr
 
 Exit code `0` if no errors; `1` if any `.error` marker files exist.
 
-### File Count
+### Source File Count
 
 ```bash
-neurodags count pipeline.yml                         # total unique files the pipeline will process
-neurodags count pipeline.yml --derivative CleanedEEG # count for a specific derivative
+neurodags count-inputs pipeline.yml                         # number of source (input) files the pipeline will process
+neurodags count-inputs pipeline.yml --derivative CleanedEEG # count for a specific derivative
 ```
 
 ### Dataframe Assembly

@@ -118,7 +118,7 @@ def _slurm_per_file(config_path: str, derivatives: list[str]) -> str:
 # Derivatives: {deriv_names}
 #
 # Submit:
-#   N=$(neurodags count {config_path})
+#   N=$(neurodags count-inputs {config_path})
 #   sbatch --array=0-$((N - 1)) run_array.sh
 #
 #SBATCH --job-name=neurodags
@@ -155,7 +155,7 @@ def _slurm_flat(config_path: str, derivatives: list[str]) -> str:
 # WARNING: use only when derivatives are independent (no inter-derivative dependencies).
 #
 # Submit:
-#   N=$(neurodags count {config_path})
+#   N=$(neurodags count-inputs {config_path})
 #   TOTAL=$(( N * {n} ))
 #   sbatch --array=0-$((TOTAL - 1)) run_array_per_deriv.sh
 #
@@ -199,7 +199,7 @@ def _slurm_chained(config_path: str, derivatives: list[str]) -> tuple[str, str]:
         "#",
         "# Usage: bash submit_pipeline.sh",
         "",
-        f"N=$(neurodags count {config_path})",
+        f"N=$(neurodags count-inputs {config_path})",
         'ARRAY="0-$((N - 1))"',
         "",
     ]
@@ -513,7 +513,8 @@ def build_parser() -> argparse.ArgumentParser:
     view_parser.add_argument("path", help="Path to a .nc or .fif file.")
 
     count_parser = subparsers.add_parser(
-        "count", help="Print the number of unique files the pipeline will process."
+        "count-inputs",
+        help="Print the number of unique source (input) files the pipeline will process.",
     )
     count_parser.add_argument("config", help="Path to the pipeline YAML configuration.")
     count_parser.add_argument(
@@ -786,7 +787,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_dag(args)
     if args.command == "view":
         return _cmd_view(args)
-    if args.command == "count":
+    if args.command == "count-inputs":
         return _cmd_count(args)
     if args.command == "status":
         return _cmd_status(args)
