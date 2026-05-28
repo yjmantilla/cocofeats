@@ -75,7 +75,7 @@ class TestDerivativeToMermaid:
 
     def test_contains_graph_td(self):
         result = derivative_to_mermaid(SIMPLE_DERIV, "Simple")
-        assert "graph TD" in result
+        assert "flowchart TD" in result
 
     def test_comment_has_derivative_name(self):
         result = derivative_to_mermaid(SIMPLE_DERIV, "MyDeriv")
@@ -112,7 +112,7 @@ class TestPipelineToMermaid:
 
     def test_graph_td_present(self):
         result = pipeline_to_mermaid(PIPELINE_CONFIG)
-        assert "graph TD" in result
+        assert "flowchart TD" in result
 
 
 class TestSaveMermaidHtml:
@@ -161,12 +161,12 @@ class TestConvenienceWrappers:
         assert result.exists()
         content = result.read_text()
         assert "Simple" in content
-        assert "graph TD" in content
+        assert "flowchart TD" in content
 
     def test_pipeline_to_html(self, tmp_path):
         out = tmp_path / "pipeline.html"
         result = pipeline_to_html(PIPELINE_CONFIG, output_path=out)
         assert result.exists()
         content = result.read_text()
-        assert "graph TD" in content
+        assert "flowchart TD" in content
         assert "StepA" in content

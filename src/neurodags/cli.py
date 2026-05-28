@@ -548,6 +548,15 @@ def build_parser() -> argparse.ArgumentParser:
         dest="auto_open",
         help="Open the generated HTML in the default browser.",
     )
+    dag_parser.add_argument(
+        "--layout",
+        choices=("dagre", "elk"),
+        default="dagre",
+        help=(
+            "Layout engine for HTML output: 'dagre' (default, step-curve edges) or "
+            "'elk' (orthogonal routing, better for dense graphs — requires CDN access)."
+        ),
+    )
 
     view_parser = subparsers.add_parser("view", help="Launch the Dash NC/FIF explorer.")
     view_parser.add_argument("path", help="Path to a .nc or .fif file.")
@@ -732,6 +741,7 @@ def _cmd_dag(args: argparse.Namespace) -> int:
                 args.derivative,
                 output_path=args.html,
                 auto_open=args.auto_open,
+                layout=args.layout,
             )
             print(html_path)
         else:
@@ -744,6 +754,7 @@ def _cmd_dag(args: argparse.Namespace) -> int:
             output_path=args.html,
             title=args.title or "Pipeline DAG",
             auto_open=args.auto_open,
+            layout=args.layout,
         )
         print(html_path)
     else:

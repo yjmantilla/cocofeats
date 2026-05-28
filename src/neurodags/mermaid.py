@@ -28,7 +28,34 @@ _HTML_TEMPLATE = """\
   </div>
   <script type="module">
     import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+    mermaid.initialize({{ startOnLoad: true, theme: 'default', flowchart: {{ curve: 'step' }} }});
+  </script>
+</body>
+</html>
+"""
+
+_HTML_TEMPLATE_ELK = """\
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{title}</title>
+  <style>
+    body {{ font-family: sans-serif; margin: 2rem; background: #fafafa; }}
+    h1 {{ color: #333; font-size: 1.4rem; }}
+    .mermaid {{ background: white; padding: 1rem; border-radius: 4px; box-shadow: 0 1px 3px rgba(0,0,0,.15); }}
+  </style>
+</head>
+<body>
+  <h1>{title}</h1>
+  <div class="mermaid">
+{mermaid_content}
+  </div>
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    import elkLayouts from 'https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.1.7/dist/mermaid-layout-elk.esm.min.mjs';
+    mermaid.registerLayoutLoaders(elkLayouts);
+    mermaid.initialize({{ startOnLoad: true, theme: 'default', layout: 'elk' }});
   </script>
 </body>
 </html>
@@ -77,7 +104,7 @@ def derivative_to_mermaid(derivative_def: dict, derivative_name: str) -> str:
         deps.discard(sid)
         step_deps[sid] = deps
 
-    lines = [f"    %% {derivative_name}", "    graph TD"]
+    lines = [f"    %% {derivative_name}", "    flowchart TD"]
 
     for sid, step in sorted(steps.items()):
         if "derivative" in step:
@@ -118,7 +145,7 @@ def pipeline_to_mermaid(pipeline_config: dict) -> str:
                 if base in defs:
                     dep_edges.append((base, deriv_name))
 
-    lines = ["    %% Pipeline DAG", "    graph TD"]
+    lines = ["    %% Pipeline DAG", "    flowchart TD"]
 
     for name in defs:
         label = _safe_label(name)
@@ -135,6 +162,7 @@ def save_mermaid_html(
     output_path: str | Path | None = None,
     title: str = "DAG",
     auto_open: bool = False,
+    layout: str = "dagre",
 ) -> Path:
     """Render *mermaid_content* into a standalone HTML file.
 
@@ -149,13 +177,18 @@ def save_mermaid_html(
         Page title and ``<h1>`` heading.
     auto_open:
         Open the file in the default browser after saving.
+    layout:
+        Layout engine: ``"dagre"`` (default, step-curve edges) or ``"elk"``
+        (orthogonal routing via ELK — better for dense graphs, requires internet
+        access to load the ELK bundle from the CDN).
     """
     if output_path is None:
         safe_title = re.sub(r"[^\w\-.]", "_", title)
         output_path = Path(f"{safe_title}.html")
     output_path = Path(output_path)
 
-    html = _HTML_TEMPLATE.format(
+    template = _HTML_TEMPLATE_ELK if layout == "elk" else _HTML_TEMPLATE
+    html = template.format(
         title=title,
         mermaid_content=mermaid_content,
     )
@@ -172,6 +205,7 @@ def derivative_to_html(
     derivative_name: str,
     output_path: str | Path | None = None,
     auto_open: bool = False,
+    layout: str = "dagre",
 ) -> Path:
     """Convenience wrapper: generate Mermaid + save HTML for one derivative."""
     mermaid_str = derivative_to_mermaid(derivative_def, derivative_name)
@@ -180,6 +214,7 @@ def derivative_to_html(
         output_path=output_path,
         title=derivative_name,
         auto_open=auto_open,
+        layout=layout,
     )
 
 
@@ -188,6 +223,7 @@ def pipeline_to_html(
     output_path: str | Path | None = None,
     title: str = "Pipeline DAG",
     auto_open: bool = False,
+    layout: str = "dagre",
 ) -> Path:
     """Convenience wrapper: generate Mermaid + save HTML for the full pipeline."""
     mermaid_str = pipeline_to_mermaid(pipeline_config)
@@ -196,4 +232,5 @@ def pipeline_to_html(
         output_path=output_path,
         title=title,
         auto_open=auto_open,
+        layout=layout,
     )
