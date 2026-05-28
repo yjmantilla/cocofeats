@@ -139,10 +139,29 @@ Errored files:
       error file: /derivatives/sub-01/ses-01/sub-01_task-rest.vhdr@Alpha.error
 ```
 
-**Exit codes:** `0` when no errors are present (missing files are expected during a partial run); `1` when at least one `.error` marker exists. This makes `status` usable in shell scripts or CI checks:
+**Exit codes:** `0` only when all derivatives are complete (no missing, no errored); `1` when any derivative is missing or has a `.error` marker. This makes `status` usable in shell scripts and CI dependency chains:
 
 ```bash
-neurodags status pipeline.yml || echo "pipeline has failures"
+# fail fast if anything is incomplete or errored
+neurodags status pipeline.yml || sbatch resubmit.sh
+```
+
+**Machine-readable output:** `--format json` emits a structured JSON object instead of the table:
+
+```bash
+neurodags status pipeline.yml --format json
+```
+
+```json
+{
+  "config": "pipeline.yml",
+  "n_files": 42,
+  "derivatives": {
+    "Alpha": {"total": 42, "done": 30, "missing": 10, "errored": 2}
+  },
+  "grand_total": {"total": 42, "done": 30, "missing": 10, "errored": 2},
+  "complete": false
+}
 ```
 
 ## DAG Visualization (Mermaid)

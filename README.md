@@ -126,9 +126,10 @@ neurodags status pipeline.yml --list-errors          # print errored file paths 
 neurodags status pipeline.yml --list-missing         # print missing file paths
 neurodags status pipeline.yml --list-errors --list-missing
 neurodags status pipeline.yml --n-jobs 4             # parallelize underlying dry-run
+neurodags status pipeline.yml --format json          # machine-readable JSON
 ```
 
-Exit code `0` if no errors; `1` if any `.error` marker files exist.
+Exit code `0` only when all derivatives are complete (no missing, no errored); `1` otherwise.
 
 ### Source File Count
 
