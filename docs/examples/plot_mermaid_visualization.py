@@ -100,6 +100,8 @@ pipeline_html = pipeline_to_html(
     output_path=out_dir / "pipeline_dag.html",
     title="My Pipeline DAG",
     auto_open=False,  # set True to open in browser
+    # layout="elk" is the default — orthogonal routing, requires CDN access.
+    # Use layout="dagre" for offline environments (right-angle step edges).
 )
 print(f"Pipeline DAG saved to: {pipeline_html}")
 
@@ -161,7 +163,8 @@ print(f"{deriv_name} DAG saved to: {deriv_html}")
 # CLI equivalents::
 #
 #     neurodags dag pipeline.yml
-#     neurodags dag pipeline.yml --html pipeline_dag.html
+#     neurodags dag pipeline.yml --html pipeline_dag.html              # ELK layout (default)
+#     neurodags dag pipeline.yml --html pipeline_dag.html --layout dagre  # offline fallback
 #     neurodags dag pipeline.yml --derivative BandPower --html bandpower_dag.html
 
 # %%

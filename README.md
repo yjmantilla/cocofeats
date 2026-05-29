@@ -152,11 +152,14 @@ neurodags dataframe pipeline.yml --n-jobs -1  # all cores
 ### DAG Visualization
 
 ```bash
-neurodags dag pipeline.yml                                       # print Mermaid text
-neurodags dag pipeline.yml --html pipeline_dag.html              # export to HTML
-neurodags dag pipeline.yml --html pipeline_dag.html --open       # export and open in browser
-neurodags dag pipeline.yml --derivative CleanedEEG --html d.html # node-level DAG for one derivative
+neurodags dag pipeline.yml                                        # print Mermaid text
+neurodags dag pipeline.yml --html pipeline_dag.html               # export to HTML (ELK layout by default)
+neurodags dag pipeline.yml --html pipeline_dag.html --open        # export and open in browser
+neurodags dag pipeline.yml --derivative CleanedEEG --html d.html  # node-level DAG for one derivative
+neurodags dag pipeline.yml --html pipeline_dag.html --layout dagre # offline fallback (no CDN)
 ```
+
+HTML output uses the ELK layout engine by default — orthogonal edge routing with crossing minimisation, significantly cleaner than curved edges for dense pipelines. Use `--layout dagre` for offline environments.
 
 ### File Explorer
 
