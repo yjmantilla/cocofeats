@@ -189,7 +189,7 @@ neurodags dag pipeline.yml --derivative CleanedEEG --html d.html  # single-deriv
 neurodags dag pipeline.yml --html pipeline_dag.html --layout elk  # ELK layout for dense graphs
 ```
 
-HTML output uses right-angle (step) edges by default — easier to follow than curved edges in dense pipelines. For very complex graphs with many crossing edges, `--layout elk` enables the ELK layout engine (orthogonal routing, active crossing minimisation). ELK requires internet access to load its bundle from the CDN.
+HTML output uses the ELK layout engine by default — orthogonal edge routing with active crossing minimisation, significantly cleaner than curved edges for dense pipelines. ELK requires internet access to load its bundle from the CDN. Use `--layout dagre` for offline use (right-angle step edges, no CDN dependency).
 
 See {doc}`inspection` for a full walkthrough of DAG visualization.
 

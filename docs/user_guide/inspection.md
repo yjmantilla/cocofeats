@@ -215,7 +215,7 @@ print(derivative_to_mermaid(config["DerivativeDefinitions"]["BandPower"], "BandP
 
 **Layout engines:**
 
-HTML output uses right-angle (step) edges by default, which are easier to follow than curved edges in dense pipelines. For very complex graphs, `--layout elk` (or `layout="elk"` in the Python API) enables the ELK layout engine — it uses orthogonal edge routing with active crossing minimisation, producing significantly cleaner diagrams when many derivatives interconnect. ELK loads its bundle from the CDN so internet access is required when opening the HTML.
+HTML output uses the ELK layout engine by default — orthogonal edge routing with active crossing minimisation, significantly cleaner than curved edges for dense pipelines. ELK loads its bundle from the CDN so internet access is required when opening the HTML. Use `--layout dagre` (or `layout="dagre"`) for offline use; dagre renders with right-angle step edges and has no CDN dependency.
 
 ```python
 # ELK layout via Python API

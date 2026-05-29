@@ -173,18 +173,18 @@ class TestConvenienceWrappers:
 
 
 class TestLayout:
-    def test_default_uses_step_curve(self, tmp_path):
+    def test_dagre_uses_step_curve(self, tmp_path):
         out = tmp_path / "test.html"
-        save_mermaid_html("flowchart TD\nA-->B", output_path=out)
+        save_mermaid_html("flowchart TD\nA-->B", output_path=out, layout="dagre")
         content = out.read_text()
         assert "curve" in content
         assert "step" in content
 
-    def test_default_does_not_use_elk(self, tmp_path):
+    def test_default_uses_elk(self, tmp_path):
         out = tmp_path / "test.html"
         save_mermaid_html("flowchart TD\nA-->B", output_path=out)
         content = out.read_text()
-        assert "elk" not in content
+        assert "layout-elk" in content
 
     def test_elk_layout_loads_elk_bundle(self, tmp_path):
         out = tmp_path / "elk.html"

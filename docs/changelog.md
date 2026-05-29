@@ -31,9 +31,10 @@
 
 ### Changed
 
-- **DAG HTML visualization uses right-angle (step) edges by default**: Mermaid diagrams now
-  use `flowchart TD` with `curve: step`, replacing the previous bezier curves. Edges are
-  significantly easier to trace in dense pipelines. The raw Mermaid text output is unchanged.
+- **DAG HTML visualization uses ELK layout by default**: Mermaid diagrams now use the ELK
+  layout engine (orthogonal edge routing, crossing minimisation) instead of dagre with bezier
+  curves. Significantly cleaner for dense pipelines. Use `--layout dagre` for offline use.
+  The raw Mermaid text output (`neurodags dag` without `--html`) is unchanged.
 
 - **`neurodags count` renamed to `neurodags count-inputs`**: clarifies that the command
   counts source (input) files the pipeline will process, not output files or derivative
@@ -42,11 +43,11 @@
 
 ### Added
 
-- **`neurodags dag --layout elk`**: new flag for HTML DAG output that enables the ELK layout
-  engine — orthogonal edge routing with crossing minimisation, significantly cleaner than the
-  default dagre layout for pipelines with many interconnected derivatives. Requires internet
-  access to load the ELK bundle from the CDN. Also available as `layout="elk"` in the Python
-  API (`pipeline_to_html`, `derivative_to_html`, `save_mermaid_html`).
+- **`neurodags dag --layout`**: new flag for HTML DAG output selecting the layout engine.
+  `elk` (default) uses orthogonal routing via ELK — requires CDN access. `dagre` uses
+  right-angle step edges with no CDN dependency — suitable for offline environments.
+  Also available as `layout=` in the Python API (`pipeline_to_html`, `derivative_to_html`,
+  `save_mermaid_html`).
 
 - **Dataset-level variables (`vars:`)**: dataset entries in `datasets.yml` can now
   declare a `vars:` block of arbitrary key-value pairs.  Any pipeline node arg whose

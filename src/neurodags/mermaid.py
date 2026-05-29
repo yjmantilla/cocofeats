@@ -162,7 +162,7 @@ def save_mermaid_html(
     output_path: str | Path | None = None,
     title: str = "DAG",
     auto_open: bool = False,
-    layout: str = "dagre",
+    layout: str = "elk",
 ) -> Path:
     """Render *mermaid_content* into a standalone HTML file.
 
@@ -205,7 +205,7 @@ def derivative_to_html(
     derivative_name: str,
     output_path: str | Path | None = None,
     auto_open: bool = False,
-    layout: str = "dagre",
+    layout: str = "elk",
 ) -> Path:
     """Convenience wrapper: generate Mermaid + save HTML for one derivative."""
     mermaid_str = derivative_to_mermaid(derivative_def, derivative_name)
@@ -223,7 +223,7 @@ def pipeline_to_html(
     output_path: str | Path | None = None,
     title: str = "Pipeline DAG",
     auto_open: bool = False,
-    layout: str = "dagre",
+    layout: str = "elk",
 ) -> Path:
     """Convenience wrapper: generate Mermaid + save HTML for the full pipeline."""
     mermaid_str = pipeline_to_mermaid(pipeline_config)

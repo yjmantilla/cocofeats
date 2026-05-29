@@ -551,10 +551,10 @@ def build_parser() -> argparse.ArgumentParser:
     dag_parser.add_argument(
         "--layout",
         choices=("dagre", "elk"),
-        default="dagre",
+        default="elk",
         help=(
-            "Layout engine for HTML output: 'dagre' (default, step-curve edges) or "
-            "'elk' (orthogonal routing, better for dense graphs — requires CDN access)."
+            "Layout engine for HTML output: 'elk' (default, orthogonal routing — requires CDN "
+            "access) or 'dagre' (step-curve edges, no CDN dependency)."
         ),
     )
 
