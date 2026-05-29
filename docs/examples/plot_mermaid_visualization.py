@@ -11,6 +11,13 @@ Two levels of detail are available:
   inter-derivative dependencies.
 - **Derivative DAG** — fine-grained view: every computation node and data
   reference inside a single derivative.
+
+Two layout engines are supported:
+
+- **ELK** (default) — orthogonal edge routing with active crossing minimisation.
+  Significantly cleaner for dense pipelines with many interconnected derivatives.
+  Requires internet access to load the ELK bundle from the CDN when the HTML is opened.
+- **dagre** — right-angle step edges, no CDN dependency. Use for offline environments.
 """
 
 # %%
@@ -88,7 +95,11 @@ print("Pipeline Mermaid diagram:")
 print(mermaid_str)
 
 # %%
-# Save to HTML (opens automatically when ``auto_open=True``).
+# Save to HTML with ELK layout (default)
+# ----------------------------------------
+# ELK produces orthogonal edges with crossing minimisation — the clearest layout
+# for pipelines with many interconnected derivatives. Requires CDN access when
+# the HTML file is opened in a browser.
 
 import tempfile
 from pathlib import Path
@@ -97,13 +108,27 @@ out_dir = Path(tempfile.mkdtemp(prefix="neurodags_mermaid_"))
 
 pipeline_html = pipeline_to_html(
     pipeline_config,
-    output_path=out_dir / "pipeline_dag.html",
-    title="My Pipeline DAG",
+    output_path=out_dir / "pipeline_dag_elk.html",
+    title="My Pipeline DAG (ELK)",
     auto_open=False,  # set True to open in browser
-    # layout="elk" is the default — orthogonal routing, requires CDN access.
-    # Use layout="dagre" for offline environments (right-angle step edges).
+    layout="elk",     # default — orthogonal routing via ELK
 )
-print(f"Pipeline DAG saved to: {pipeline_html}")
+print(f"Pipeline DAG (ELK) saved to: {pipeline_html}")
+
+# %%
+# Save to HTML with dagre layout (offline fallback)
+# --------------------------------------------------
+# dagre uses right-angle step edges and loads no external resources — suitable
+# for air-gapped environments or when CDN access is unavailable.
+
+pipeline_html_dagre = pipeline_to_html(
+    pipeline_config,
+    output_path=out_dir / "pipeline_dag_dagre.html",
+    title="My Pipeline DAG (dagre)",
+    auto_open=False,
+    layout="dagre",   # offline fallback, no CDN dependency
+)
+print(f"Pipeline DAG (dagre) saved to: {pipeline_html_dagre}")
 
 # %%
 # Derivative-level Mermaid diagram
@@ -126,13 +151,14 @@ print(f"\n{deriv_name} derivative Mermaid diagram:")
 print(mermaid_str)
 
 # %%
-# Save the derivative diagram to HTML.
+# Save the derivative diagram to HTML (ELK layout).
 
 deriv_html = derivative_to_html(
     deriv_def,
     deriv_name,
     output_path=out_dir / f"{deriv_name}_dag.html",
     auto_open=False,
+    layout="elk",
 )
 print(f"{deriv_name} DAG saved to: {deriv_html}")
 
@@ -149,8 +175,11 @@ print(f"{deriv_name} DAG saved to: {deriv_html}")
 #     with open("pipeline.yml") as f:
 #         config = yaml.safe_load(f)
 #
-#     # Full pipeline overview
+#     # Full pipeline overview — ELK layout (default)
 #     pipeline_to_html(config, output_path="pipeline_dag.html", auto_open=True)
+#
+#     # Offline fallback — dagre layout
+#     pipeline_to_html(config, output_path="pipeline_dag.html", layout="dagre", auto_open=True)
 #
 #     # Single derivative detail
 #     derivative_to_html(
@@ -163,19 +192,20 @@ print(f"{deriv_name} DAG saved to: {deriv_html}")
 # CLI equivalents::
 #
 #     neurodags dag pipeline.yml
-#     neurodags dag pipeline.yml --html pipeline_dag.html              # ELK layout (default)
-#     neurodags dag pipeline.yml --html pipeline_dag.html --layout dagre  # offline fallback
+#     neurodags dag pipeline.yml --html pipeline_dag.html               # ELK layout (default)
+#     neurodags dag pipeline.yml --html pipeline_dag.html --layout dagre # offline fallback
 #     neurodags dag pipeline.yml --derivative BandPower --html bandpower_dag.html
 
 # %%
 # Direct Mermaid string access
 # -----------------------------
 # Use the raw string functions when you need to embed diagrams in Jupyter
-# notebooks or custom HTML templates.
+# notebooks or custom HTML templates. Pass ``layout=`` to ``save_mermaid_html``
+# to select the layout engine for the wrapper HTML.
 
 from neurodags.mermaid import save_mermaid_html
 
-custom_diagram = """    graph TD
+custom_diagram = """    flowchart TD
       A["load_raw"] --> B["filter"]
       B --> C["epoch"]
       C --> D[("BasicPrep.fif")]"""
@@ -184,5 +214,6 @@ out = save_mermaid_html(
     custom_diagram,
     output_path=out_dir / "custom_dag.html",
     title="Custom DAG",
+    layout="elk",
 )
 print(f"Custom DAG saved to: {out}")
