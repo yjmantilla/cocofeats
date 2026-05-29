@@ -170,3 +170,46 @@ class TestConvenienceWrappers:
         content = result.read_text()
         assert "flowchart TD" in content
         assert "StepA" in content
+
+
+class TestLayout:
+    def test_default_uses_step_curve(self, tmp_path):
+        out = tmp_path / "test.html"
+        save_mermaid_html("flowchart TD\nA-->B", output_path=out)
+        content = out.read_text()
+        assert "curve" in content
+        assert "step" in content
+
+    def test_default_does_not_use_elk(self, tmp_path):
+        out = tmp_path / "test.html"
+        save_mermaid_html("flowchart TD\nA-->B", output_path=out)
+        content = out.read_text()
+        assert "elk" not in content
+
+    def test_elk_layout_loads_elk_bundle(self, tmp_path):
+        out = tmp_path / "elk.html"
+        save_mermaid_html("flowchart TD\nA-->B", output_path=out, layout="elk")
+        content = out.read_text()
+        assert "layout-elk" in content
+        assert "registerLayoutLoaders" in content
+        assert "'elk'" in content or '"elk"' in content
+
+    def test_derivative_to_html_elk(self, tmp_path):
+        out = tmp_path / "deriv_elk.html"
+        result = derivative_to_html(SIMPLE_DERIV, "Simple", output_path=out, layout="elk")
+        content = result.read_text()
+        assert "layout-elk" in content
+
+    def test_pipeline_to_html_elk(self, tmp_path):
+        out = tmp_path / "pipeline_elk.html"
+        result = pipeline_to_html(PIPELINE_CONFIG, output_path=out, layout="elk")
+        content = result.read_text()
+        assert "layout-elk" in content
+
+    def test_flowchart_td_in_generators(self):
+        mermaid_str = derivative_to_mermaid(SIMPLE_DERIV, "Simple")
+        assert "flowchart TD" in mermaid_str
+
+    def test_pipeline_flowchart_td(self):
+        mermaid_str = pipeline_to_mermaid(PIPELINE_CONFIG)
+        assert "flowchart TD" in mermaid_str

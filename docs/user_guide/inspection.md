@@ -213,12 +213,23 @@ print(pipeline_to_mermaid(config))
 print(derivative_to_mermaid(config["DerivativeDefinitions"]["BandPower"], "BandPower"))
 ```
 
+**Layout engines:**
+
+HTML output uses right-angle (step) edges by default, which are easier to follow than curved edges in dense pipelines. For very complex graphs, `--layout elk` (or `layout="elk"` in the Python API) enables the ELK layout engine — it uses orthogonal edge routing with active crossing minimisation, producing significantly cleaner diagrams when many derivatives interconnect. ELK loads its bundle from the CDN so internet access is required when opening the HTML.
+
+```python
+# ELK layout via Python API
+pipeline_to_html(config, output_path="pipeline_dag.html", layout="elk")
+derivative_to_html(deriv_def, "BandPower", output_path="bp.html", layout="elk")
+```
+
 CLI:
 
 ```bash
 neurodags dag pipeline.yml
 neurodags dag pipeline.yml --html pipeline_dag.html
 neurodags dag pipeline.yml --derivative BandPower --html bandpower_dag.html
+neurodags dag pipeline.yml --html pipeline_dag.html --layout elk   # ELK for dense graphs
 ```
 
 See the {doc}`../auto_examples/plot_mermaid_visualization` example for a

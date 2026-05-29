@@ -31,12 +31,22 @@
 
 ### Changed
 
+- **DAG HTML visualization uses right-angle (step) edges by default**: Mermaid diagrams now
+  use `flowchart TD` with `curve: step`, replacing the previous bezier curves. Edges are
+  significantly easier to trace in dense pipelines. The raw Mermaid text output is unchanged.
+
 - **`neurodags count` renamed to `neurodags count-inputs`**: clarifies that the command
   counts source (input) files the pipeline will process, not output files or derivative
   instances. One input file may produce multiple output files depending on the derivatives.
   All generated SLURM templates, documentation, and tests updated accordingly.
 
 ### Added
+
+- **`neurodags dag --layout elk`**: new flag for HTML DAG output that enables the ELK layout
+  engine — orthogonal edge routing with crossing minimisation, significantly cleaner than the
+  default dagre layout for pipelines with many interconnected derivatives. Requires internet
+  access to load the ELK bundle from the CDN. Also available as `layout="elk"` in the Python
+  API (`pipeline_to_html`, `derivative_to_html`, `save_mermaid_html`).
 
 - **Dataset-level variables (`vars:`)**: dataset entries in `datasets.yml` can now
   declare a `vars:` block of arbitrary key-value pairs.  Any pipeline node arg whose

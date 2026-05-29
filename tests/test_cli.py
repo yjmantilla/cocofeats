@@ -137,6 +137,28 @@ def test_dag_derivative_html_exports():
         export.assert_called_once()
 
 
+def test_dag_layout_elk_passed_to_derivative_html():
+    cfg = {"DerivativeDefinitions": {"BandPower": {"nodes": []}}}
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.derivative_to_html", return_value=Path("out.html")) as export,
+    ):
+        main(["dag", "pipeline.yml", "--derivative", "BandPower", "--html", "out.html", "--layout", "elk"])
+        _, kwargs = export.call_args
+        assert kwargs.get("layout") == "elk"
+
+
+def test_dag_layout_elk_passed_to_pipeline_html():
+    cfg = {"DerivativeDefinitions": {}}
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.pipeline_to_html", return_value=Path("out.html")) as export,
+    ):
+        main(["dag", "pipeline.yml", "--html", "out.html", "--layout", "elk"])
+        _, kwargs = export.call_args
+        assert kwargs.get("layout") == "elk"
+
+
 def test_view_launches_visualization_subprocess():
     with patch("neurodags.cli.subprocess.Popen") as popen:
         assert main(["view", "result.nc"]) == 0

@@ -186,7 +186,10 @@ neurodags dag pipeline.yml                                        # print Mermai
 neurodags dag pipeline.yml --html pipeline_dag.html               # export to standalone HTML
 neurodags dag pipeline.yml --html pipeline_dag.html --open        # export and open in browser
 neurodags dag pipeline.yml --derivative CleanedEEG --html d.html  # single-derivative DAG
+neurodags dag pipeline.yml --html pipeline_dag.html --layout elk  # ELK layout for dense graphs
 ```
+
+HTML output uses right-angle (step) edges by default — easier to follow than curved edges in dense pipelines. For very complex graphs with many crossing edges, `--layout elk` enables the ELK layout engine (orthogonal routing, active crossing minimisation). ELK requires internet access to load its bundle from the CDN.
 
 See {doc}`inspection` for a full walkthrough of DAG visualization.
 
