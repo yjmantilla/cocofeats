@@ -1,5 +1,6 @@
 """neurodags: A modern Python package template."""
 
+from .definitions import SkipDerivative
 from .example import add
 
 try:
@@ -9,4 +10,4 @@ except Exception:
     # last-resort fallback when importing directly from a bare git checkout
     __version__ = "0+unknown"
 
-__all__ = ["__version__", "add"]
+__all__ = ["__version__", "add", "SkipDerivative"]

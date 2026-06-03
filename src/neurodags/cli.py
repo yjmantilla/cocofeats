@@ -254,18 +254,22 @@ EOF
 
 
 def _status_classify(plan: list) -> str:
-    """Return 'done', 'missing', 'errored', 'no-save', or 'unknown' from a dry-run plan list.
+    """Return 'done', 'skipped', 'missing', 'errored', 'no-save', or 'unknown' from a dry-run plan list.
 
     'done' means at least one artifact file matching the derivative prefix exists on disk.
     It does NOT verify that all artifact files are present — a derivative that produces
     multiple artifacts (multiple keys in NodeResult.artifacts) will show as 'done' even
     if only one of those files was written (e.g. after a partial failure).
+    'skipped' means a .skip marker exists — the derivative was intentionally not computed
+    for this source file (e.g. a condition not present in a subject's recording).
     """
     if not isinstance(plan, list):
         return "unknown"
     final = next((s for s in plan if s.get("kind") == "derivative_output"), None)
     if final is None:
         return "unknown"
+    if final.get("has_skip_marker"):
+        return "skipped"
     if final.get("has_error_marker"):
         return "errored"
     if not final.get("will_save", True):
@@ -319,7 +323,7 @@ def _cmd_status(args: argparse.Namespace) -> int:
     all_derivs = sorted(status_df["derivative"].unique())
     total_files = status_df["file_path"].nunique()
 
-    grand = {"total": 0, "done": 0, "missing": 0, "errored": 0}
+    grand = {"total": 0, "done": 0, "skipped": 0, "missing": 0, "errored": 0}
     per_deriv: dict[str, dict[str, int]] = {}
 
     for deriv in all_derivs:
@@ -327,10 +331,23 @@ def _cmd_status(args: argparse.Namespace) -> int:
         counts = sub["status"].value_counts()
         total = len(sub)
         done = int(counts.get("done", 0))
+        skipped = int(counts.get("skipped", 0))
         missing = int(counts.get("missing", 0))
         errored = int(counts.get("errored", 0))
-        per_deriv[deriv] = {"total": total, "done": done, "missing": missing, "errored": errored}
-        for k, v in (("total", total), ("done", done), ("missing", missing), ("errored", errored)):
+        per_deriv[deriv] = {
+            "total": total,
+            "done": done,
+            "skipped": skipped,
+            "missing": missing,
+            "errored": errored,
+        }
+        for k, v in (
+            ("total", total),
+            ("done", done),
+            ("skipped", skipped),
+            ("missing", missing),
+            ("errored", errored),
+        ):
             grand[k] += v
 
     complete = grand["missing"] == 0 and grand["errored"] == 0
@@ -351,7 +368,10 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
     # --- table output ---
     col_w = max(24, max(len(d) for d in all_derivs) + 2)
-    header = f"{'Derivative':<{col_w}} {'total':>6}  {'done':>6}  {'missing':>8}  {'errored':>8}"
+    header = (
+        f"{'Derivative':<{col_w}} {'total':>6}  {'done':>6}  {'skipped':>8}"
+        f"  {'missing':>8}  {'errored':>8}"
+    )
     sep = "─" * len(header)
 
     print(f"config: {args.config}")
@@ -363,18 +383,21 @@ def _cmd_status(args: argparse.Namespace) -> int:
     for deriv in all_derivs:
         c = per_deriv[deriv]
         print(
-            f"{deriv:<{col_w}} {c['total']:>6}  {c['done']:>6}  {c['missing']:>8}  {c['errored']:>8}"
+            f"{deriv:<{col_w}} {c['total']:>6}  {c['done']:>6}  {c['skipped']:>8}"
+            f"  {c['missing']:>8}  {c['errored']:>8}"
         )
 
     print(sep)
     print(
-        f"{'Total':<{col_w}} {grand['total']:>6}  {grand['done']:>6}"
+        f"{'Total':<{col_w}} {grand['total']:>6}  {grand['done']:>6}  {grand['skipped']:>8}"
         f"  {grand['missing']:>8}  {grand['errored']:>8}"
     )
     print(
         "\nNote: 'total' counts (derivative x source-file) pairs, not output files. "
         "'done' means ≥1 artifact file exists — a derivative that writes multiple files "
-        "per source file may show 'done' even after a partial write."
+        "per source file may show 'done' even after a partial write. "
+        "'skipped' means a .skip marker exists — the derivative was intentionally not "
+        "computed for that source file (e.g. condition absent from the recording)."
     )
 
     if grand["errored"]:
@@ -382,6 +405,11 @@ def _cmd_status(args: argparse.Namespace) -> int:
         if not args.list_errors:
             print("  Run with --list-errors for details.", end="")
         print()
+
+    if grand["skipped"]:
+        print(
+            f"\n{grand['skipped']} derivative(s) skipped (not applicable for those source files)."
+        )
 
     if grand["missing"] and not complete:
         print(f"{grand['missing']} derivative(s) missing.", end="")

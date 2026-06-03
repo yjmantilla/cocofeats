@@ -162,6 +162,56 @@ DerivativeDefinitions:
           threshold: 0.5
 ```
 
+## Signaling That a Derivative Does Not Apply: `SkipDerivative`
+
+Sometimes a source file is legitimately not processable by a given derivative — not because
+of a bug, but because the input simply does not contain the required data. The canonical
+example is a multi-condition EEG study where not every subject underwent every condition:
+a node that extracts epochs for `HV_EO` (hyperventilation eyes-open) should silently skip
+subjects who never performed that task, rather than raising an unhandled error.
+
+Raise `SkipDerivative` from inside a node to signal this intent:
+
+```python
+from neurodags.definitions import SkipDerivative, NodeResult, Artifact
+
+@register_node
+def extract_condition_features(raw_path: str, condition_name: str) -> NodeResult:
+    epochs = load_and_epoch(raw_path, condition_name)
+    if epochs is None or len(epochs) == 0:
+        raise SkipDerivative(
+            f"Condition '{condition_name}' not present in '{raw_path}'."
+        )
+    result = compute_features(epochs)
+    return NodeResult(artifacts={".nc": Artifact(item=result, writer=result.to_netcdf)})
+```
+
+**What neurodags does when `SkipDerivative` is raised:**
+
+1. Writes a `.skip` marker file alongside where the artifact would have been saved
+   (e.g. `sub-0002@SpectrumWelch.skip`). The exception message is written into the file.
+2. Propagates the skip to all parent derivatives that depend on this one — they each write
+   their own `.skip` marker without attempting to compute.
+3. Reports the derivative as **skipped** in `neurodags status` output (a distinct column,
+   separate from *missing* and *errored*).
+4. Does **not** retry skipped derivatives on subsequent runs unless the `.skip` file is
+   deleted manually or the derivative has `overwrite: true`.
+
+**`SkipDerivative` vs a plain exception:**
+
+| Situation | What to raise |
+|---|---|
+| Condition genuinely absent from this recording | `SkipDerivative` |
+| Missing file / corrupt data / unexpected format | `ValueError` / `RuntimeError` → becomes `.error` |
+| Bug in your node code | Let it propagate naturally → becomes `.error` |
+
+**Inspecting skipped files:** the `.skip` marker contains the reason string, so you can
+audit which subjects were skipped and why:
+
+```bash
+find derivatives/ -name "*.skip" -exec cat {} \;
+```
+
 ## Built-in Node Registry API
 
 ```python
