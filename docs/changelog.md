@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### Added
+
+- **`SkipDerivative` exception**: nodes can now raise `SkipDerivative` to signal that a
+  source file is intentionally not processable by a given derivative — distinct from an
+  unexpected error. neurodags catches this, writes a `.skip` marker file alongside where
+  the artifact would have been saved, and propagates the skip to all parent derivatives
+  that depend on it (each writing their own `.skip` marker). Skipped derivatives are not
+  retried on subsequent runs unless the `.skip` file is deleted or `overwrite: true` is
+  set. **Motivation:** in multi-condition studies, some subjects may not have undergone
+  every condition; without `SkipDerivative`, their missing conditions showed as *missing*
+  in `neurodags status` — indistinguishable from derivatives that simply had not run yet,
+  which made pipeline completion state ambiguous. (`definitions.SkipDerivative`,
+  `dag.run_derivative`, `neurodags.SkipDerivative`)
+
+- **`neurodags status` reports skipped derivatives**: the status table now includes a
+  *skipped* column alongside *done*, *missing*, and *errored*. Derivatives with a `.skip`
+  marker are reported as skipped — not missing — so pipeline operators can distinguish
+  "will never compute for this file" from "has not run yet". The note at the bottom of
+  the table explains what skipped means. JSON output (`--format json`) also includes the
+  skipped count per derivative. (`cli._status_classify`, `cli._cmd_status`)
+
 ### Fixed
 
 - **Sub-derivative cache respected when parent has `overwrite: True`**: previously,

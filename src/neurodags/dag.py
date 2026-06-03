@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 import yaml
 
-from neurodags.definitions import NodeResult
+from neurodags.definitions import NodeResult, SkipDerivative
 from neurodags.derivatives import (
     get_derivative as get_derivative_definition,
 )
@@ -237,11 +237,15 @@ def register_derivatives_from_yaml(yaml_path: str) -> list[str]:
 
 
 def _artifact_candidates_for(prefix: str) -> list[str]:
-    # Returns all non-error files matching prefix.*. Used by the dry-run plan to set
+    # Returns all non-error, non-skip files matching prefix.*. Used by the dry-run plan to set
     # cached=True when any artifact exists. Does NOT guarantee all expected artifact files
     # are present — a derivative that writes N files shows as cached after only 1 is written.
     # TODO: How to add option to skip derivatives that previously failed? (.error files)
-    return [x for x in sorted(glob.glob(prefix + ".*")) if not x.endswith(".error")]
+    return [
+        x
+        for x in sorted(glob.glob(prefix + ".*"))
+        if not x.endswith(".error") and not x.endswith(".skip")
+    ]
 
 
 class _MissingPrecomputedArtifacts(RuntimeError):
@@ -299,7 +303,9 @@ def run_derivative(
     )
     final_prefix = base_reference + "@" + snake_to_camel(derivative_name) if save else None
     error_path = (final_prefix + ".error") if final_prefix else None
+    skip_marker_path = (final_prefix + ".skip") if final_prefix else None
     has_error_marker = bool(error_path and Path(error_path).exists())
+    has_skip_marker = bool(skip_marker_path and Path(skip_marker_path).exists())
 
     if dry_run:
         if save:
@@ -313,6 +319,8 @@ def run_derivative(
                 paths=final_candidates,
                 has_error_marker=has_error_marker,
                 error_path=error_path if has_error_marker else None,
+                has_skip_marker=has_skip_marker,
+                skip_path=skip_marker_path if has_skip_marker else None,
             )
         else:
             _record(
@@ -324,8 +332,19 @@ def run_derivative(
                 paths=[],
                 has_error_marker=has_error_marker,
                 error_path=error_path if has_error_marker else None,
+                has_skip_marker=has_skip_marker,
+                skip_path=skip_marker_path if has_skip_marker else None,
             )
     else:
+        # Early skip if .skip marker exists (derivative not applicable), unless overwriting
+        if has_skip_marker and not overwrite:
+            log.info(
+                "Derivative has skip marker; treating as not applicable",
+                derivative=derivative_name,
+                skip_path=skip_marker_path,
+                file_path=file_path,
+            )
+            return {"skipped": skip_marker_path}
         # Early skip if final already cached and not overwriting
         if save and not overwrite:
             final_candidates = _artifact_candidates_for(final_prefix)
@@ -430,15 +449,48 @@ def run_derivative(
                     parent_derivative=derivative_name,
                     child_derivative=base_name,
                 )
-                sub_result = run_derivative(
-                    get_derivative_definition(base_name).definition,
-                    base_name,
-                    file_path,
-                    reference_base=reference_base,
-                    dataset_config=dataset_config,
-                    mount_point=mount_point,
-                    dry_run=False,
-                )
+                try:
+                    sub_result = run_derivative(
+                        get_derivative_definition(base_name).definition,
+                        base_name,
+                        file_path,
+                        reference_base=reference_base,
+                        dataset_config=dataset_config,
+                        mount_point=mount_point,
+                        dry_run=False,
+                    )
+                except SkipDerivative as skip_exc:
+                    # save:False sub-derivative raised SkipDerivative — propagate skip upward
+                    log.info(
+                        "Sub-derivative (save=False) signaled skip; propagating to parent",
+                        parent_derivative=derivative_name,
+                        child_derivative=base_name,
+                        reason=str(skip_exc),
+                    )
+                    if save:
+                        assert skip_marker_path is not None
+                        with open(skip_marker_path, "w", encoding="utf-8") as sf:
+                            sf.write(f"Sub-derivative '{base_name}' was skipped: {skip_exc!s}\n")
+                        log.debug("Wrote skip marker", path=skip_marker_path)
+                        return {"skipped": skip_marker_path}
+                    raise  # save:False parent also propagates
+
+                # If sub-derivative returned {"skipped": ...} (save:True sub wrote its own
+                # .skip marker), propagate skip to this parent derivative too.
+                if isinstance(sub_result, dict) and "skipped" in sub_result:
+                    log.info(
+                        "Sub-derivative was skipped; propagating skip to parent",
+                        parent_derivative=derivative_name,
+                        child_derivative=base_name,
+                    )
+                    if save:
+                        assert skip_marker_path is not None
+                        with open(skip_marker_path, "w", encoding="utf-8") as sf:
+                            sf.write(f"Sub-derivative '{base_name}' was skipped.\n")
+                        log.debug("Wrote skip marker", path=skip_marker_path)
+                        return {"skipped": skip_marker_path}
+                    raise SkipDerivative(f"Sub-derivative '{base_name}' was skipped")
+
                 # If the sub-derivative early-returned its cached-file dict
                 # ({"cached": [path, ...]}) instead of a NodeResult, resolve it
                 # to the matching path so downstream nodes receive a plain path
@@ -549,6 +601,31 @@ def run_derivative(
                     if stale_error.exists():
                         stale_error.unlink()
                         log.debug("Removed stale error marker", path=str(stale_error))
+            except SkipDerivative as skip_exc:
+                log.info(
+                    "Node signaled skip; derivative not applicable for this source file",
+                    derivative=derivative_name,
+                    id=sid,
+                    node=node_name,
+                    reason=str(skip_exc),
+                )
+                if save:
+                    assert skip_marker_path is not None
+                    try:
+                        with open(skip_marker_path, "w", encoding="utf-8") as sf:
+                            sf.write(
+                                f"Derivative '{derivative_name}' step id={sid} node='{node_name}' skipped:\n{skip_exc!s}\n"
+                            )
+                        log.debug("Wrote skip marker", path=skip_marker_path)
+                    except Exception as ee:
+                        log.error(
+                            "Error writing skip marker file",
+                            path=skip_marker_path,
+                            error=str(ee),
+                            exc_info=True,
+                        )
+                    return {"skipped": skip_marker_path}
+                raise  # save:False — propagate to parent
             except Exception as e:
                 log.error(
                     "Error executing node",
