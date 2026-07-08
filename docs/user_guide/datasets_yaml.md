@@ -10,6 +10,7 @@
   file_pattern: <string or mount-point map>
   derivatives_path: <string or mount-point map>
   exclude_pattern: <glob string>             # optional
+  drop_split_continuations: <bool>           # optional, default True
   skip: <bool>                               # optional, default False
   vars: {<key>: <value>, ...}               # optional, dataset-level variables
 ```
@@ -49,6 +50,25 @@ derivatives_path:
 ### `exclude_pattern`
 
 Optional glob to exclude files matching the pattern from processing.
+
+### `drop_split_continuations`
+
+Optional, default `True`. MNE writes recordings larger than ~2 GB as a set of
+split `.fif` files, where only the first (*entry*) file is an independent
+recording — `mne.io.read_raw_fif(entry)` stitches the continuations back in
+automatically. With this enabled, the scanner keeps the entry file of each split
+set and drops the continuations, so the pipeline does not process partial
+recordings as if they were separate source files. Both naming conventions are
+recognised:
+
+- **BIDS** (mne-bids): keeps `..._split-01_meg.fif`, drops `..._split-02_meg.fif`+
+- **plain mne**: keeps `name.fif`, drops `name-1.fif`, `name-2.fif`, …
+
+Detection is filename-based (no files are opened during scanning), and the
+plain-mne rule only drops a `-N` file when its entry file is also present, so
+legitimately named files such as `sub-01_..._run-2_meg.fif` are never dropped.
+Set to `False` to disable and return every matched file. The number of dropped
+continuations is logged.
 
 ### `skip`
 
