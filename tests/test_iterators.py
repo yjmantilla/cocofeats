@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from neurodags import iterators
 from neurodags.definitions import DatasetConfig
 from neurodags.iterators import (
     find_split_continuations,
@@ -184,6 +185,81 @@ def test_datasets_per_dataset_optout(tmp_path: Path):
     }
     _, all_files, _ = get_all_files_across_datasets(datasets)
     assert len(all_files) == 3
+
+
+# ---------------------------------------------------------------------------
+# get_files_from_pattern — exclude_filter
+# ---------------------------------------------------------------------------
+
+
+def test_get_files_from_pattern_exclude_filter(tmp_path: Path):
+    d = tmp_path / "raw"
+    _touch(d / "keep_meg.fif")
+    _touch(d / "drop_meg.fif")
+
+    found = get_files_from_pattern(
+        str(tmp_path / "**" / "*.fif"),
+        exclude_filter=str(tmp_path / "**" / "drop_*.fif"),
+    )
+    assert [Path(f).name for f in found] == ["keep_meg.fif"]
+
+
+# ---------------------------------------------------------------------------
+# get_all_files_across_datasets — skip / no-pattern / error / max_files
+# ---------------------------------------------------------------------------
+
+
+def _make_plain_dataset(tmp_path: Path, n: int = 3) -> str:
+    d = tmp_path / "raw"
+    for i in range(n):
+        _touch(d / f"rec-{i}_meg.fif")
+    return str(tmp_path / "**" / "*.fif")
+
+
+def test_datasets_skip_true_is_skipped(tmp_path: Path):
+    pattern = _make_plain_dataset(tmp_path)
+    datasets = {"ds": DatasetConfig(name="ds", file_pattern=pattern, skip=True)}
+    files_per_dataset, all_files, _ = get_all_files_across_datasets(datasets)
+    assert files_per_dataset == {}
+    assert all_files == []
+
+
+def test_datasets_empty_pattern_is_skipped(tmp_path: Path):
+    datasets = {"ds": DatasetConfig(name="ds", file_pattern="")}
+    files_per_dataset, all_files, _ = get_all_files_across_datasets(datasets)
+    assert files_per_dataset == {}
+    assert all_files == []
+
+
+def test_datasets_pattern_error_is_skipped(tmp_path: Path, monkeypatch):
+    pattern = _make_plain_dataset(tmp_path)
+    datasets = {"ds": DatasetConfig(name="ds", file_pattern=pattern)}
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("glob blew up")
+
+    monkeypatch.setattr(iterators, "get_files_from_pattern", boom)
+    files_per_dataset, all_files, _ = get_all_files_across_datasets(datasets)
+    assert files_per_dataset == {}
+    assert all_files == []
+
+
+def test_datasets_no_files_found_is_skipped(tmp_path: Path):
+    # Pattern matches nothing -> dataset produces no files and is skipped
+    datasets = {"ds": DatasetConfig(name="ds", file_pattern=str(tmp_path / "**" / "*.fif"))}
+    files_per_dataset, all_files, _ = get_all_files_across_datasets(datasets)
+    assert files_per_dataset == {}
+    assert all_files == []
+
+
+def test_datasets_max_files_per_dataset(tmp_path: Path):
+    pattern = _make_plain_dataset(tmp_path, n=3)
+    datasets = {"ds": DatasetConfig(name="ds", file_pattern=pattern)}
+    files_per_dataset, all_files, _ = get_all_files_across_datasets(
+        datasets, max_files_per_dataset=1
+    )
+    assert len(files_per_dataset["ds"]) == 1
+    assert len(all_files) == 1
 
 
 if __name__ == "__main__":
