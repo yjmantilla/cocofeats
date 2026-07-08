@@ -1,7 +1,11 @@
 from pathlib import Path
 from unittest.mock import patch
 
-from neurodags.dag import _MissingPrecomputedArtifacts, collect_derivative_for_dataframe, run_derivative
+from neurodags.dag import (
+    _MissingPrecomputedArtifacts,
+    collect_derivative_for_dataframe,
+    run_derivative,
+)
 from neurodags.definitions import NodeResult
 
 
@@ -39,7 +43,10 @@ def test_run_derivative_saves_artifacts_by_default(tmp_path):
 
     assert isinstance(result, NodeResult)
     assert output_path.exists()
-    assert output_path.read_text() == "Dummy derivative extraction completed with param1=foo and param2=None"
+    assert (
+        output_path.read_text()
+        == "Dummy derivative extraction completed with param1=foo and param2=None"
+    )
 
 
 def test_run_derivative_skips_saving_when_flag_false(tmp_path):

@@ -9,6 +9,7 @@ specific artifact using the dot-extension syntax:
 Previously this selection only worked for on-disk (cached) artifacts.
 The patch makes it work identically for in-memory (uncached) results.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -21,10 +22,10 @@ from neurodags.definitions import NodeResult
 from neurodags.derivatives import unregister_derivative
 from neurodags.derivatives.pipeline import register_derivatives_from_dict
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _ref_base(tmp_path: Path) -> Path:
     ref = tmp_path / "subject" / "sample"
@@ -53,7 +54,7 @@ def _pipeline_cfg(splitter_keys: list[str], consumer_suffix: str) -> dict:
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def registered_pipeline(request):
     """Register a pipeline config into the global derivative registry and clean up after."""
     cfg = request.param
@@ -78,6 +79,7 @@ def _run(tmp_path: Path, derivative: str, cfg: dict) -> NodeResult:
 # ---------------------------------------------------------------------------
 # Core: in-memory artifact selection
 # ---------------------------------------------------------------------------
+
 
 def test_splitter_produces_multiple_artifacts(tmp_path):
     """dummy_multi returns one artifact per key — no registration needed."""
@@ -158,6 +160,7 @@ def test_no_suffix_passes_full_node_result(tmp_path, registered_pipeline):
 # On-disk path: suffix selection from cached files
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "registered_pipeline",
     [_pipeline_cfg(["alpha", "beta"], "alpha.txt")],
@@ -195,6 +198,7 @@ def test_consumer_selects_artifact_from_disk(tmp_path, registered_pipeline):
 # Missing suffix: warning + fallback
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.parametrize(
     "registered_pipeline",
     [_pipeline_cfg(["alpha", "beta"], "gamma.txt")],
@@ -221,6 +225,7 @@ def test_missing_suffix_falls_back_to_full_node_result(tmp_path, registered_pipe
 # ---------------------------------------------------------------------------
 # Consistency: in-memory and on-disk selection agree
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "registered_pipeline",
@@ -265,6 +270,7 @@ def test_in_memory_and_disk_selection_agree(tmp_path, registered_pipeline):
 # ---------------------------------------------------------------------------
 # Child overwrite flag: parent overwrite=True must not force child to re-run
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "registered_pipeline",
@@ -372,6 +378,7 @@ def test_cached_dict_no_ext_resolved_to_first_path(tmp_path):
     child_def = {"overwrite": False, "nodes": [{"id": 0, "node": "dummy", "args": {}}]}
 
     from neurodags.derivatives import register_derivative_with_name
+
     register_derivative_with_name("Child", lambda: None, definition=child_def)
     try:
         ref = tmp_path / "subject" / "sample"
@@ -386,8 +393,10 @@ def test_cached_dict_no_ext_resolved_to_first_path(tmp_path):
             return original_run(definition, derivative_name, *args, **kwargs)
 
         # _artifact_candidates_for returns [] so cached_here=False → we recurse into Child
-        with patch("neurodags.dag.run_derivative", side_effect=mock_run), \
-             patch("neurodags.dag._artifact_candidates_for", return_value=[]):
+        with (
+            patch("neurodags.dag.run_derivative", side_effect=mock_run),
+            patch("neurodags.dag._artifact_candidates_for", return_value=[]),
+        ):
             result = original_run(
                 consumer_def,
                 "Consumer",

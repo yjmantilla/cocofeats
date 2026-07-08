@@ -5,7 +5,7 @@ import json
 import logging
 import re
 import sys
-from typing import Generator
+from collections.abc import Generator
 
 import pytest
 import structlog
@@ -151,7 +151,7 @@ def test_env_overrides_force_json(monkeypatch, capsys):
 
 
 def test_invalid_level_raises():
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Unknown log level"):
         logmod._coerce_level("NOT_A_LEVEL")
 
 

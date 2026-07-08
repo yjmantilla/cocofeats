@@ -1,6 +1,6 @@
 # tests/test_loaders_extra.py
 import io
-import types
+
 import pytest
 import yaml
 
@@ -12,6 +12,7 @@ def test_fallback_to_safe_loader(monkeypatch):
     monkeypatch.delattr(yaml, "CSafeLoader", raising=False)
     # Reload the module to trigger the import-time try/except
     import importlib
+
     import neurodags.loaders as loaders_mod
 
     importlib.reload(loaders_mod)
@@ -81,7 +82,7 @@ def test_load_meeg_both_fail(monkeypatch, tmp_path):
     f = tmp_path / "badfile.fif"
     f.write_text("placeholder")
 
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(ValueError, match="Could not load MEEG file") as e:
         loaders.load_meeg(f)
     assert "Could not load MEEG file" in str(e.value)
 

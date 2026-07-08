@@ -1,4 +1,5 @@
 """Tests for xarray operation nodes."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -14,10 +15,10 @@ from neurodags.nodes.operations import (
     slice_xarray,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def simple_da():
@@ -40,6 +41,7 @@ def simple_ds(simple_da):
 # ---------------------------------------------------------------------------
 # binarize_with_median
 # ---------------------------------------------------------------------------
+
 
 def test_binarize_returns_noderesulet(simple_da):
     result = binarize_with_median(simple_da, dim="times")
@@ -75,6 +77,7 @@ def test_binarize_invalid_path_raises(tmp_path):
 # mean_across_dimension
 # ---------------------------------------------------------------------------
 
+
 def test_mean_returns_noderesulet(simple_da):
     result = mean_across_dimension(simple_da, dim="times")
     assert isinstance(result, NodeResult)
@@ -102,6 +105,7 @@ def test_mean_invalid_type_raises():
 # ---------------------------------------------------------------------------
 # extract_data_var
 # ---------------------------------------------------------------------------
+
 
 def test_extract_from_dataset(simple_ds):
     result = extract_data_var(simple_ds, data_var="power")
@@ -133,7 +137,7 @@ def test_extract_from_noderesulet(simple_ds):
 
 def test_extract_noderesulet_missing_nc_raises(simple_da):
     nr = NodeResult(artifacts={".fif": Artifact(item=simple_da, writer=lambda p: None)})
-    with pytest.raises(ValueError, match=".nc"):
+    with pytest.raises(ValueError, match=r"\.nc"):
         extract_data_var(nr, data_var="power")
 
 
@@ -145,7 +149,7 @@ def test_extract_missing_var_raises(simple_ds):
 def test_extract_dataarray_wrong_name_raises(simple_da):
     da = simple_da.copy()
     da.name = "other"
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="does not match requested variable name"):
         extract_data_var(da, data_var="power")
 
 
@@ -171,6 +175,7 @@ def test_extract_invalid_type_raises():
 # ---------------------------------------------------------------------------
 # slice_xarray
 # ---------------------------------------------------------------------------
+
 
 def test_slice_by_index(simple_da):
     result = slice_xarray(simple_da, dim="times", start=1, end=3)
@@ -205,7 +210,7 @@ def test_slice_from_noderesulet(simple_da):
 
 def test_slice_noderesulet_missing_nc_raises(simple_da):
     nr = NodeResult(artifacts={".fif": Artifact(item=simple_da, writer=lambda p: None)})
-    with pytest.raises(ValueError, match=".nc"):
+    with pytest.raises(ValueError, match=r"\.nc"):
         slice_xarray(nr, dim="times", start=0, end=2)
 
 
@@ -228,6 +233,7 @@ def test_slice_single_index_squeezes(simple_da):
 # ---------------------------------------------------------------------------
 # aggregate_across_dimension
 # ---------------------------------------------------------------------------
+
 
 def test_aggregate_mean(simple_da):
     result = aggregate_across_dimension(simple_da, dim="times", operation="mean")
@@ -262,7 +268,7 @@ def test_aggregate_from_noderesulet(simple_da):
 
 def test_aggregate_noderesulet_missing_nc_raises(simple_da):
     nr = NodeResult(artifacts={".fif": Artifact(item=simple_da, writer=lambda p: None)})
-    with pytest.raises(ValueError, match=".nc"):
+    with pytest.raises(ValueError, match=r"\.nc"):
         aggregate_across_dimension(nr, dim="times", operation="mean")
 
 
@@ -277,6 +283,8 @@ def test_aggregate_invalid_type_raises():
 
 
 def test_aggregate_with_args(simple_da):
-    result = aggregate_across_dimension(simple_da, dim="times", operation="mean", args={"keepdims": False})
+    result = aggregate_across_dimension(
+        simple_da, dim="times", operation="mean", args={"keepdims": False}
+    )
     arr = result.artifacts[".nc"].item
     assert isinstance(arr, xr.DataArray)

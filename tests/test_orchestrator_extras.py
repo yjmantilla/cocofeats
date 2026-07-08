@@ -1,10 +1,10 @@
 """Extra coverage tests for orchestrators.py — branches not covered by integration tests."""
+
 from __future__ import annotations
 
 import pandas as pd
 import pytest
 
-from neurodags.definitions import Artifact, NodeResult
 from neurodags.orchestrators import (
     _resolve_reference_base,
     _sanitize_reference_base,
@@ -12,10 +12,10 @@ from neurodags.orchestrators import (
     iterate_derivative_pipeline,
 )
 
-
 # ---------------------------------------------------------------------------
 # _sanitize_reference_base — unit tests
 # ---------------------------------------------------------------------------
+
 
 def test_sanitize_reference_base_replaces_at_in_filename():
     result = _sanitize_reference_base("/derivatives/sub-01.vhdr@BasicPrep.fif")
@@ -47,6 +47,7 @@ def test_sanitize_reference_base_no_directory():
 # _resolve_reference_base — no derivatives_path branch
 # ---------------------------------------------------------------------------
 
+
 def test_resolve_reference_base_no_derivatives_path(tmp_path):
     from neurodags.definitions import DatasetConfig
 
@@ -56,7 +57,7 @@ def test_resolve_reference_base_no_derivatives_path(tmp_path):
         derivatives_path=None,
     )
     file_path = str(tmp_path / "sub-01" / "file.vhdr")
-    ref_str, ref_path = _resolve_reference_base(file_path, ds_config, None, None)
+    ref_str, _ref_path = _resolve_reference_base(file_path, ds_config, None, None)
     assert ref_str == file_path
 
 
@@ -92,7 +93,7 @@ def test_resolve_reference_base_sanitizes_at_with_derivatives_path(tmp_path):
         derivatives_path=str(deriv_dir),
     )
     file_path = str(raw_dir / "sub-01" / "sub-01.vhdr@BasicPrep.fif")
-    ref_str, ref_path = _resolve_reference_base(file_path, ds_config, str(raw_dir), None)
+    ref_str, _ref_path = _resolve_reference_base(file_path, ds_config, str(raw_dir), None)
     assert "@" not in ref_str
     assert "&" in ref_str
     # derivative goes into deriv_dir with sanitized filename
@@ -103,6 +104,7 @@ def test_resolve_reference_base_sanitizes_at_with_derivatives_path(tmp_path):
 # ---------------------------------------------------------------------------
 # iterate_derivative_pipeline — derivative type checks
 # ---------------------------------------------------------------------------
+
 
 def test_iterate_pipeline_unknown_derivative_raises(dummy_pipeline):
     cfg = dummy_pipeline["config"]
@@ -129,16 +131,21 @@ def test_iterate_pipeline_callable_derivative(dummy_pipeline):
     from neurodags.nodes.preprocessing import basic_preprocessing
 
     cfg = dummy_pipeline["config"]
-    iterate_derivative_pipeline(cfg, basic_preprocessing, max_files_per_dataset=1, raise_on_error=True)
+    iterate_derivative_pipeline(
+        cfg, basic_preprocessing, max_files_per_dataset=1, raise_on_error=True
+    )
 
 
 # ---------------------------------------------------------------------------
 # iterate_derivative_pipeline — n_jobs handling
 # ---------------------------------------------------------------------------
 
+
 def test_iterate_pipeline_n_jobs_zero_maps_to_serial(dummy_pipeline):
     cfg = dummy_pipeline["config"]
-    iterate_derivative_pipeline(cfg, "BasicPrep", n_jobs=0, max_files_per_dataset=1, raise_on_error=True)
+    iterate_derivative_pipeline(
+        cfg, "BasicPrep", n_jobs=0, max_files_per_dataset=1, raise_on_error=True
+    )
 
 
 def test_iterate_pipeline_n_jobs_parallel(dummy_pipeline):
@@ -152,6 +159,7 @@ def test_iterate_pipeline_n_jobs_parallel(dummy_pipeline):
 # iterate_derivative_pipeline — only_index with missing indices (warning path)
 # ---------------------------------------------------------------------------
 
+
 def test_iterate_pipeline_only_index_missing_warns(dummy_pipeline):
     cfg = dummy_pipeline["config"]
     iterate_derivative_pipeline(cfg, "BasicPrep", only_index=[9999], raise_on_error=False)
@@ -160,6 +168,7 @@ def test_iterate_pipeline_only_index_missing_warns(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # iterate_derivative_pipeline — raise_on_error with a failing node
 # ---------------------------------------------------------------------------
+
 
 def test_iterate_pipeline_raise_on_error(dummy_pipeline):
     cfg = dummy_pipeline["config"]
@@ -174,6 +183,7 @@ def test_iterate_pipeline_raise_on_error(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # iterate_derivative_pipeline — empty jobs (no files found)
 # ---------------------------------------------------------------------------
+
 
 def test_iterate_pipeline_empty_dataset(tmp_path):
     cfg = {
@@ -224,6 +234,7 @@ def test_iterate_pipeline_empty_dataset_dry_run(tmp_path):
 # build_derivative_dataframe — no DerivativeDefinitions
 # ---------------------------------------------------------------------------
 
+
 def test_build_dataframe_no_derivative_definitions(dummy_pipeline):
     cfg = {k: v for k, v in dummy_pipeline["config"].items() if k != "DerivativeDefinitions"}
     result = build_derivative_dataframe(cfg)
@@ -234,6 +245,7 @@ def test_build_dataframe_no_derivative_definitions(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # build_derivative_dataframe — no eligible derivatives
 # ---------------------------------------------------------------------------
+
 
 def test_build_dataframe_no_eligible_derivatives(dummy_pipeline):
     cfg = {
@@ -266,6 +278,7 @@ def test_build_dataframe_missing_for_dataframe_defaults_to_excluded(dummy_pipeli
 # build_derivative_dataframe — include_derivatives with missing derivative
 # ---------------------------------------------------------------------------
 
+
 def test_build_dataframe_include_nonexistent_derivative(dummy_pipeline):
     cfg = dummy_pipeline["config"]
     iterate_derivative_pipeline(cfg, "BasicPrep", raise_on_error=True)
@@ -278,6 +291,7 @@ def test_build_dataframe_include_nonexistent_derivative(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # build_derivative_dataframe — only_index with missing index (warning path)
 # ---------------------------------------------------------------------------
+
 
 def test_build_dataframe_only_index_missing(dummy_pipeline):
     cfg = dummy_pipeline["config"]
@@ -292,6 +306,7 @@ def test_build_dataframe_only_index_missing(dummy_pipeline):
 # iterate_derivative_pipeline — new_definitions (str path)
 # ---------------------------------------------------------------------------
 
+
 def test_iterate_pipeline_new_definitions_str(dummy_pipeline, tmp_path):
     from neurodags.nodes.preprocessing import basic_preprocessing
 
@@ -302,7 +317,9 @@ def test_iterate_pipeline_new_definitions_str(dummy_pipeline, tmp_path):
         **dummy_pipeline["config"],
         "new_definitions": str(node_file),
     }
-    iterate_derivative_pipeline(cfg, basic_preprocessing, max_files_per_dataset=1, raise_on_error=True)
+    iterate_derivative_pipeline(
+        cfg, basic_preprocessing, max_files_per_dataset=1, raise_on_error=True
+    )
 
 
 def test_iterate_pipeline_new_definitions_list(dummy_pipeline, tmp_path):
@@ -315,7 +332,9 @@ def test_iterate_pipeline_new_definitions_list(dummy_pipeline, tmp_path):
         **dummy_pipeline["config"],
         "new_definitions": [str(node_file)],
     }
-    iterate_derivative_pipeline(cfg, basic_preprocessing, max_files_per_dataset=1, raise_on_error=True)
+    iterate_derivative_pipeline(
+        cfg, basic_preprocessing, max_files_per_dataset=1, raise_on_error=True
+    )
 
 
 def test_iterate_pipeline_new_definitions_invalid_type_raises(dummy_pipeline):
@@ -332,6 +351,7 @@ def test_iterate_pipeline_new_definitions_invalid_type_raises(dummy_pipeline):
 def test_iterate_pipeline_new_definitions_relative_to_pipeline_yaml(dummy_pipeline, tmp_path):
     """new_definitions relative path resolved against pipeline yaml, not cwd."""
     import yaml
+
     from neurodags.nodes.preprocessing import basic_preprocessing
 
     pipeline_dir = tmp_path / "pipeline_dir"
@@ -347,7 +367,9 @@ def test_iterate_pipeline_new_definitions_relative_to_pipeline_yaml(dummy_pipeli
     pipeline_yaml.write_text(yaml.dump(cfg))
 
     # Must resolve relative to pipeline_dir, not cwd
-    iterate_derivative_pipeline(str(pipeline_yaml), basic_preprocessing, max_files_per_dataset=1, raise_on_error=True)
+    iterate_derivative_pipeline(
+        str(pipeline_yaml), basic_preprocessing, max_files_per_dataset=1, raise_on_error=True
+    )
 
 
 def test_get_datasets_relative_to_pipeline_path(tmp_path):
