@@ -1,11 +1,10 @@
 """Tests for descriptive nodes using real MNE objects."""
+
 from __future__ import annotations
 
 import datetime
 import json
 
-import mne
-import numpy as np
 import pytest
 import xarray as xr
 
@@ -17,10 +16,10 @@ from neurodags.nodes.descriptive import (
     meeg_to_xarray,
 )
 
-
 # ---------------------------------------------------------------------------
 # _format_meas_date
 # ---------------------------------------------------------------------------
+
 
 def test_format_meas_date_none():
     assert _format_meas_date(None) is None
@@ -47,6 +46,7 @@ def test_format_meas_date_string_fallback():
 # _build_metadata
 # ---------------------------------------------------------------------------
 
+
 def test_build_metadata_raw(dummy_raw_obj):
     raw, _ = dummy_raw_obj
     meta = _build_metadata(raw, kind="raw")
@@ -72,6 +72,7 @@ def test_build_metadata_extra(dummy_raw_obj):
 # ---------------------------------------------------------------------------
 # extract_meeg_metadata
 # ---------------------------------------------------------------------------
+
 
 def test_extract_meeg_metadata_raw_returns_noderesulet(dummy_raw_obj):
     raw, _ = dummy_raw_obj
@@ -107,8 +108,10 @@ def test_extract_meeg_metadata_accepts_noderesulet(dummy_raw_obj):
 
 
 def test_extract_meeg_metadata_noderesulet_missing_fif_raises():
-    with pytest.raises(ValueError, match=".fif"):
-        extract_meeg_metadata(NodeResult(artifacts={".nc": Artifact(item=None, writer=lambda p: None)}))
+    with pytest.raises(ValueError, match=r"\.fif"):
+        extract_meeg_metadata(
+            NodeResult(artifacts={".nc": Artifact(item=None, writer=lambda p: None)})
+        )
 
 
 def test_extract_meeg_metadata_from_path(dummy_vhdr_file):
@@ -130,6 +133,7 @@ def test_extract_meeg_metadata_writer_produces_valid_json(dummy_raw_obj, tmp_pat
 # ---------------------------------------------------------------------------
 # meeg_to_xarray
 # ---------------------------------------------------------------------------
+
 
 def test_meeg_to_xarray_raw_returns_noderesulet(dummy_raw_obj):
     raw, _ = dummy_raw_obj
@@ -183,7 +187,7 @@ def test_meeg_to_xarray_accepts_noderesulet(dummy_raw_obj):
 
 
 def test_meeg_to_xarray_noderesulet_missing_fif_raises():
-    with pytest.raises(ValueError, match=".fif"):
+    with pytest.raises(ValueError, match=r"\.fif"):
         meeg_to_xarray(NodeResult(artifacts={".nc": Artifact(item=None, writer=lambda p: None)}))
 
 

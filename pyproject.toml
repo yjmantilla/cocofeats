@@ -114,6 +114,15 @@ select = [
 ]
 ignore = ["E501"]
 
+# Unicode characters used intentionally in comments/docstrings: math notation
+# (×, α, en-dash) and the ASCII-art DAG diagrams in the gallery examples.
+allowed-confusables = ["×", "α", "–", "’", "╱"]
+
+[tool.ruff.lint.per-file-ignores]
+# Sphinx-gallery example scripts intersperse imports between narrative "# %%"
+# cells; module-level imports are deliberately not all at the top.
+"docs/examples/*" = ["E402"]
+
 [tool.mypy]
 python_version = "3.10"
 warn_unused_configs = true

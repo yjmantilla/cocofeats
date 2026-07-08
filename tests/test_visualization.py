@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import patch
 
 import numpy as np
@@ -21,13 +22,12 @@ from neurodags.visualization import (
     safe_sel,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def da_1d() -> xr.DataArray:
     return xr.DataArray(
         [1.0, 4.0, 9.0],
@@ -36,7 +36,7 @@ def da_1d() -> xr.DataArray:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def da_2d() -> xr.DataArray:
     return xr.DataArray(
         np.arange(6.0).reshape(2, 3),
@@ -45,7 +45,7 @@ def da_2d() -> xr.DataArray:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def da_3d() -> xr.DataArray:
     return xr.DataArray(
         np.ones((2, 3, 4)),
@@ -58,7 +58,7 @@ def da_3d() -> xr.DataArray:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def dataset_multi(da_1d: xr.DataArray, da_2d: xr.DataArray) -> xr.Dataset:
     return xr.Dataset({"spectrum": da_1d, "bandpower": da_2d})
 
@@ -216,7 +216,7 @@ def test_make_dim_controls_empty_dims() -> None:
 
 
 def test_controls_for_variable_xval_is_last_dim(da_2d: xr.DataArray) -> None:
-    _, x_opts, x_val, y_opts, y_val = _controls_for_variable(da_2d)
+    _, _x_opts, x_val, _y_opts, _y_val = _controls_for_variable(da_2d)
     assert x_val == "freq"
 
 
@@ -233,7 +233,7 @@ def test_controls_for_variable_x_opts_match_dims(da_2d: xr.DataArray) -> None:
 
 
 def test_controls_for_variable_1d(da_1d: xr.DataArray) -> None:
-    children, x_opts, x_val, y_opts, _ = _controls_for_variable(da_1d)
+    children, x_opts, x_val, _y_opts, _ = _controls_for_variable(da_1d)
     assert x_val == "freq"
     assert len(x_opts) == 1
     # 2 children (label + dropdown) for the single dim
@@ -246,7 +246,7 @@ def test_controls_for_variable_1d(da_1d: xr.DataArray) -> None:
 
 
 def test_compute_figure_1d_line(da_1d: xr.DataArray) -> None:
-    fig, debug = _compute_figure(da_1d, {}, "freq", None, "line", "none", "none")
+    fig, _debug = _compute_figure(da_1d, {}, "freq", None, "line", "none", "none")
     assert len(fig.data) == 1
     assert fig.data[0].type == "scatter"
     assert fig.data[0].mode == "lines"
@@ -312,9 +312,7 @@ def test_compute_figure_debug_json_keys(da_1d: xr.DataArray) -> None:
 
 
 def test_compute_figure_debug_reflects_selections(da_2d: xr.DataArray) -> None:
-    _, debug = _compute_figure(
-        da_2d, {"channel": "ch1"}, "freq", None, "bar", "log10", "square"
-    )
+    _, debug = _compute_figure(da_2d, {"channel": "ch1"}, "freq", None, "bar", "log10", "square")
     info = json.loads(debug)
     assert info["xdim"] == "freq"
     assert info["plot_type"] == "bar"

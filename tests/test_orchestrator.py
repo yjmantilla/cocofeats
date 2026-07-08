@@ -1,9 +1,10 @@
 from neurodags.datasets import generate_dummy_dataset
+from neurodags.nodes import get_node, list_nodes
 from neurodags.orchestrators import (
     get_all_files_from_pipeline_configuration,
-    get_datasets_and_mount_point_from_pipeline_configuration,
     iterate_derivative_pipeline,
 )
+
 dataset_1 = {
     "PATTERN": "sub-%subject%/ses-%session%/sub-%subject%_ses-%session%_task-%task%_acq-%acquisition%_run-%run%",
     "DATASET": "dataset1",
@@ -59,8 +60,6 @@ print("All files with indices:", all_files)
 print("Common roots:", common_roots)
 
 # Now run the derivative extraction
-from neurodags.nodes import get_node, list_nodes
-
 print("Registered nodes:", list_nodes())
 
 if False:
@@ -81,7 +80,7 @@ for derivative_name in ["SpectrumArrayWelch", "SpectrumArrayMultitaper"]:
         pipeline_configuration=pipeline_input,
         derivative=derivative_name,  # the thin wrapper
         max_files_per_dataset=None,
-        dry_run = False,
-        only_index = [3,5],
-        raise_on_error = True,
+        dry_run=False,
+        only_index=[3, 5],
+        raise_on_error=True,
     )

@@ -1,17 +1,18 @@
 # tests/test_get_num_digits.py
-import pytest
-import os
-from neurodags.utils import get_num_digits, get_path, find_unique_root, replace_bids_suffix
 import ntpath
+import os
 import posixpath
-from pathlib import PureWindowsPath, PurePosixPath
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
+
+import pytest
+
+from neurodags.utils import find_unique_root, get_num_digits, get_path, replace_bids_suffix
 
 # Tests for get_num_digits function
 
 
 @pytest.mark.parametrize(
-    "n, expected",
+    ("n", "expected"),
     [
         (0, 1),
         (5, 1),
@@ -27,7 +28,7 @@ def test_safe_mode_basic(n, expected):
 
 
 @pytest.mark.parametrize(
-    "n, expected",
+    ("n", "expected"),
     [
         (1, 1),
         (9, 1),
@@ -45,7 +46,7 @@ def test_zero_in_fast_mode():
 
 
 def test_large_number_consistency():
-    n = 10 ** 50  # 51 digits
+    n = 10**50  # 51 digits
     safe = get_num_digits(n, method="safe")
     fast = get_num_digits(n, method="fast")
     # Both should agree
@@ -53,7 +54,7 @@ def test_large_number_consistency():
 
 
 def test_invalid_method_raises():
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="Unknown method") as excinfo:
         get_num_digits(123, method="wrong")
     assert "Unknown method" in str(excinfo.value)
 
@@ -136,7 +137,7 @@ def _has_unique_relpaths(root, filepaths) -> bool:
 
 
 def _parent_dir(path) -> str | None:
-    pmod, PurePath, use_windows = _pick_flavor([path])
+    pmod, _PurePath, use_windows = _pick_flavor([path])
     path = pmod.normpath(os.fspath(path))
     parent = pmod.dirname(path)
 
@@ -340,7 +341,7 @@ def test_maximal_mode_returns_deepest():
 
 
 @pytest.mark.parametrize(
-    "input_path,new_suffix,new_ext,expected",
+    ("input_path", "new_suffix", "new_ext", "expected"),
     [
         # Case with underscore and multi-part extension
         (

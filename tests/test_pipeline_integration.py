@@ -1,16 +1,18 @@
 """End-to-end integration tests for iterate_derivative_pipeline and build_derivative_dataframe."""
+
 from __future__ import annotations
 
+import time
 from unittest.mock import patch
 
 import pytest
 
 from neurodags.orchestrators import build_derivative_dataframe, iterate_derivative_pipeline
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _output_files(out_dir, pattern):
     return list(out_dir.rglob(pattern))
@@ -19,6 +21,7 @@ def _output_files(out_dir, pattern):
 # ---------------------------------------------------------------------------
 # Basic execution
 # ---------------------------------------------------------------------------
+
 
 def test_iterate_pipeline_produces_fif_outputs(dummy_pipeline):
     cfg = dummy_pipeline["config"]
@@ -57,6 +60,7 @@ def test_iterate_pipeline_one_output_per_input(dummy_pipeline):
 # Caching
 # ---------------------------------------------------------------------------
 
+
 def test_iterate_pipeline_second_run_skips_cached(dummy_pipeline, tmp_path):
     cfg = dummy_pipeline["config"]
     out_dir = dummy_pipeline["out_dir"]
@@ -81,7 +85,7 @@ def test_iterate_pipeline_overwrite_forces_recompute(dummy_pipeline):
     fif_files_first = _output_files(out_dir, "*@BasicPrep.fif")
     mtimes_first = {f: f.stat().st_mtime for f in fif_files_first}
 
-    import time; time.sleep(0.05)
+    time.sleep(0.05)
 
     cfg_overwrite = {**cfg}
     cfg_overwrite["DerivativeDefinitions"] = {
@@ -99,6 +103,7 @@ def test_iterate_pipeline_overwrite_forces_recompute(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # Dry run
 # ---------------------------------------------------------------------------
+
 
 def test_iterate_pipeline_dry_run_returns_dataframe(dummy_pipeline):
     import pandas as pd
@@ -122,6 +127,7 @@ def test_iterate_pipeline_dry_run_writes_no_files(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # only_index / max_files_per_dataset
 # ---------------------------------------------------------------------------
+
 
 def test_iterate_pipeline_only_index_limits_output(dummy_pipeline):
     cfg = dummy_pipeline["config"]
@@ -154,6 +160,7 @@ def test_iterate_pipeline_max_files_per_dataset(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # Dataframe assembly
 # ---------------------------------------------------------------------------
+
 
 def test_build_derivative_dataframe_wide(dummy_pipeline):
     cfg = dummy_pipeline["config"]
@@ -190,6 +197,7 @@ def test_build_derivative_dataframe_long(dummy_pipeline):
 # ---------------------------------------------------------------------------
 # Multi-step chain (save=False derivative is computed, not saved)
 # ---------------------------------------------------------------------------
+
 
 def test_save_false_derivative_not_on_disk(dummy_pipeline):
     cfg = dummy_pipeline["config"]
@@ -244,6 +252,7 @@ def test_build_derivative_dataframe_parallel_long_matches_serial(dummy_pipeline)
 # ---------------------------------------------------------------------------
 # Error handling in _collect_dataframe_file
 # ---------------------------------------------------------------------------
+
 
 def test_build_derivative_dataframe_derivative_error_captured(dummy_pipeline):
     """Derivative-level error is caught and stored as __error column, row still returned."""

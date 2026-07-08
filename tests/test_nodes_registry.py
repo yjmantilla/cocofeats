@@ -19,7 +19,7 @@ def test_register_node_duplicate_guard():
         return "ok"
 
     try:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="already registered"):
 
             @nodes.register_node(name="temporary_node")
             def duplicate_node():

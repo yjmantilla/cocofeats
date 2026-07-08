@@ -1,17 +1,16 @@
 """Tests for nodes/loader.py — load_node_definitions and helpers."""
-from __future__ import annotations
 
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
 import neurodags.nodes.loader as loader_mod
 from neurodags.nodes.loader import _unique_module_name, load_node_definitions
 
-
 # ---------------------------------------------------------------------------
 # _unique_module_name
 # ---------------------------------------------------------------------------
+
 
 def test_unique_module_name_is_deterministic(tmp_path):
     p = tmp_path / "nodes.py"
@@ -32,6 +31,7 @@ def test_unique_module_name_has_prefix(tmp_path):
 # ---------------------------------------------------------------------------
 # load_node_definitions
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def clear_loaded_sources():

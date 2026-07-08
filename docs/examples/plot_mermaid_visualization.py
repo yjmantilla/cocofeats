@@ -111,7 +111,7 @@ pipeline_html = pipeline_to_html(
     output_path=out_dir / "pipeline_dag_elk.html",
     title="My Pipeline DAG (ELK)",
     auto_open=False,  # set True to open in browser
-    layout="elk",     # default — orthogonal routing via ELK
+    layout="elk",  # default — orthogonal routing via ELK
 )
 print(f"Pipeline DAG (ELK) saved to: {pipeline_html}")
 
@@ -126,7 +126,7 @@ pipeline_html_dagre = pipeline_to_html(
     output_path=out_dir / "pipeline_dag_dagre.html",
     title="My Pipeline DAG (dagre)",
     auto_open=False,
-    layout="dagre",   # offline fallback, no CDN dependency
+    layout="dagre",  # offline fallback, no CDN dependency
 )
 print(f"Pipeline DAG (dagre) saved to: {pipeline_html_dagre}")
 

@@ -1,23 +1,22 @@
 # Tests for neurodags.datasets module
 from __future__ import annotations
-import sys, os
-import numpy as np
-from pathlib import Path
-import pytest
-import mne
-import re
 
+import re
+from pathlib import Path
+
+import mne
+import numpy as np
+import pytest
 
 from neurodags.datasets import (
-    replace_brainvision_filename,
-    make_dummy_dataset,
     generate_1_over_f_noise,
-    get_dummy_raw,
-    get_dummy_epochs,
-    save_dummy_vhdr,
     generate_dummy_dataset,
+    get_dummy_epochs,
+    get_dummy_raw,
+    make_dummy_dataset,
+    replace_brainvision_filename,
+    save_dummy_vhdr,
 )
-
 
 # Tests for replace_brainvision_filename function
 
@@ -341,7 +340,7 @@ def _welch_psd(x: np.ndarray, sfreq: float, n_seg: int = 1024, overlap: float = 
     if starts.size == 0:
         starts = np.array([0], dtype=int)
     window = np.hanning(n_seg)
-    wnorm = (window ** 2).sum()
+    wnorm = (window**2).sum()
     acc = None
     for s in starts:
         seg = x[s : s + n_seg]
@@ -389,7 +388,7 @@ def test_shape_and_zscore_stats():
     assert np.allclose(stds, 1.0, atol=3e-2)
 
 
-def test_reproducibility_seed_and_generator():
+def test_reproducibility_seed_and_generator_noise():
     # Seed reproducibility
     a1 = generate_1_over_f_noise(3, 8192, exponent=1.0, random_state=123)
     a2 = generate_1_over_f_noise(3, 8192, exponent=1.0, random_state=123)
@@ -406,7 +405,7 @@ def test_reproducibility_seed_and_generator():
 
 
 @pytest.mark.parametrize(
-    "exp, tol",
+    ("exp", "tol"),
     [
         (0.0, 0.20),  # white ≈ flat
         (0.5, 0.40),  # pinkish
@@ -451,9 +450,9 @@ def test_slope_consistency_across_sfreq():
     assert abs(sa - sb) < 0.2  # slopes should be close regardless of sampling rate
 
 
-@pytest.mark.parametrize("nc, nt", [(-1, 100), (0, 100), (2, 0), (2, -10)])
+@pytest.mark.parametrize(("nc", "nt"), [(-1, 100), (0, 100), (2, 0), (2, -10)])
 def test_invalid_sizes_raise(nc, nt):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must be positive integers"):
         _ = generate_1_over_f_noise(nc, nt, exponent=1.0, random_state=0)
 
 
@@ -489,7 +488,7 @@ def test_basic_shape_and_info():
 
 def test_events_evenly_spaced_and_exact_count():
     # Choose parameters so n_times is large compared to NUMEVENTS
-    raw, events = get_dummy_raw(NCHANNELS=2, SFREQ=100.0, STOP=10.0, NUMEVENTS=25, random_state=1)
+    _raw, events = get_dummy_raw(NCHANNELS=2, SFREQ=100.0, STOP=10.0, NUMEVENTS=25, random_state=1)
     # evenly spaced in integer samples (monotonic, no duplicates, exact count)
     samples = events[:, 0]
     assert len(samples) == len(np.unique(samples))
@@ -509,7 +508,7 @@ def test_zscore_stats_reasonable():
     assert np.allclose(stds, 1.0, atol=3e-2)
 
 
-def test_reproducibility_seed_and_generator():
+def test_reproducibility_seed_and_generator_raw():
     a_raw, a_ev = get_dummy_raw(3, 200.0, 5.0, 7, random_state=123)
     b_raw, b_ev = get_dummy_raw(3, 200.0, 5.0, 7, random_state=123)
     c_raw, c_ev = get_dummy_raw(3, 200.0, 5.0, 7, random_state=124)
@@ -530,7 +529,7 @@ def test_reproducibility_seed_and_generator():
 
 
 def test_event_id_custom():
-    raw, events = get_dummy_raw(2, 100.0, 3.0, 6, event_id=7, random_state=0)
+    _raw, events = get_dummy_raw(2, 100.0, 3.0, 6, event_id=7, random_state=0)
     assert np.all(events[:, 2] == 7)
 
 
@@ -547,22 +546,22 @@ def test_numevents_equal_to_samples():
 @pytest.mark.parametrize(
     "kwargs",
     [
-        dict(NCHANNELS=0),
-        dict(SFREQ=0.0),
-        dict(STOP=0.0),
-        dict(NUMEVENTS=0),
+        {"NCHANNELS": 0},
+        {"SFREQ": 0.0},
+        {"STOP": 0.0},
+        {"NUMEVENTS": 0},
     ],
 )
 def test_invalid_parameters_raise(kwargs):
-    base = dict(NCHANNELS=2, SFREQ=100.0, STOP=2.0, NUMEVENTS=2)
+    base = {"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 2.0, "NUMEVENTS": 2}
     base.update(kwargs)
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must be"):
         _ = get_dummy_raw(**base)
 
 
 def test_numevents_exceeds_samples_raises():
     # n_times = round(10 * 0.5) = 5; request 6 events → error
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="exceeds number of samples"):
         _ = get_dummy_raw(NCHANNELS=1, SFREQ=10.0, STOP=0.5, NUMEVENTS=6, random_state=0)
 
 
@@ -579,7 +578,8 @@ def test_save_dummy_vhdr_creates_trio(tmp_path: Path):
         out, dummy_args={"NCHANNELS": 2, "SFREQ": 100.0, "STOP": 1.0, "NUMEVENTS": 4}
     )
 
-    assert isinstance(paths, list) and len(paths) == 3
+    assert isinstance(paths, list)
+    assert len(paths) == 3
     vhdr_path, eeg_path, vmrk_path = paths
     assert vhdr_path.exists()
     assert eeg_path.exists()
@@ -611,7 +611,7 @@ def test_header_references_match_basename(tmp_path: Path):
     paths = save_dummy_vhdr(
         out, dummy_args={"NCHANNELS": 2, "SFREQ": 120.0, "STOP": 1.0, "NUMEVENTS": 5}
     )
-    vhdr_path, eeg_path, vmrk_path = paths
+    vhdr_path, _eeg_path, _vmrk_path = paths
 
     base = vhdr_path.with_suffix("")  # same base for trio
     base_name = base.name
@@ -739,9 +739,10 @@ def test_auto_template_creation_when_example_missing(tmp_path: Path):
     BrainVision trio (not persisted under package _data) and still populate ROOT.
     """
     # Import the real function + module to locate the package _data dir
-    from neurodags.datasets import generate_dummy_dataset  # ← adjust if different
-    from neurodags import datasets as ds_mod  # ← adjust if different
     import shutil
+
+    from neurodags import datasets as ds_mod  # ← adjust if different
+    from neurodags.datasets import generate_dummy_dataset  # ← adjust if different
 
     dataset_name = "AUTOTPL"
     root = tmp_path / "AUTOOUT"
@@ -781,7 +782,6 @@ def test_auto_template_creation_when_example_missing(tmp_path: Path):
         # Cleanup in case the function behavior changes in the future
         if tpl_dir.exists():
             shutil.rmtree(tpl_dir)
-            log.debug("Removed temporary template directory", path=tpl_dir)
 
 
 def test_returns_none(tmp_path: Path):
@@ -804,6 +804,7 @@ def test_get_dummy_epochs_shapes():
     # Check time window
     assert epochs.tmax - epochs.tmin > 0
 
+
 if __name__ == "__main__":
-#    pytest.main([__file__])
+    #    pytest.main([__file__])
     pytest.main(["-v", "-s", "-q", "--no-cov", "--pdb", __file__])
