@@ -18,10 +18,12 @@ from neurodags.definitions import Artifact, NodeResult
 from neurodags.nodes.spectral import (
     bandpower,
     bandpower_corrected,
-    fooof as fooof_node,
     fooof_component,
     fooof_peaks,
     fooof_scalars,
+)
+from neurodags.nodes.spectral import (
+    fooof as fooof_node,
 )
 
 fooof_pkg = pytest.importorskip("fooof")
@@ -104,7 +106,11 @@ class TestFooof:
         psd_3d = xr.DataArray(
             np.stack([psd_2ch.values, psd_2ch.values]),
             dims=("epochs", "spaces", "frequencies"),
-            coords={"epochs": [0, 1], "spaces": ["ch0", "ch1"], "frequencies": psd_2ch.coords["frequencies"].values},
+            coords={
+                "epochs": [0, 1],
+                "spaces": ["ch0", "ch1"],
+                "frequencies": psd_2ch.coords["frequencies"].values,
+            },
         )
         result = _run_fooof(psd_3d)
         fooof_da = _fooof_da(result)
@@ -456,7 +462,9 @@ class TestBandpowerCorrected:
 
     def test_output_shape(self, psd_and_fooof):
         psd, fooof_r = psd_and_fooof
-        result = bandpower_corrected(psd, fooof_r, bands={"alpha": (8.0, 13.0), "beta": (13.0, 30.0)})
+        result = bandpower_corrected(
+            psd, fooof_r, bands={"alpha": (8.0, 13.0), "beta": (13.0, 30.0)}
+        )
         da = result.artifacts[".nc"].item
         assert da.sizes["spaces"] == 2
         assert da.sizes["freqbands"] == 2
@@ -479,7 +487,8 @@ class TestBandpowerCorrected:
     def test_relative_values_between_zero_and_one(self, psd_and_fooof):
         psd, fooof_r = psd_and_fooof
         result = bandpower_corrected(
-            psd, fooof_r,
+            psd,
+            fooof_r,
             bands={"delta": (1.0, 4.0), "alpha": (8.0, 13.0)},
             relative=True,
         )

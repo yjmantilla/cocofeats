@@ -1,4 +1,5 @@
 """Shared pytest fixtures for neurodags tests."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -8,10 +9,10 @@ import pytest
 
 from neurodags.datasets import generate_dummy_dataset, get_dummy_epochs, get_dummy_raw
 
-
 # ---------------------------------------------------------------------------
 # MNE object fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="session")
 def dummy_raw_obj():
@@ -24,8 +25,14 @@ def dummy_raw_obj():
 def dummy_epochs_obj():
     """Minimal MNE Epochs derived from the same dummy raw."""
     return get_dummy_epochs(
-        NCHANNELS=4, SFREQ=100.0, STOP=10.0, NUMEVENTS=5,
-        tmin=0.0, tmax=0.9, random_state=0, baseline=None,
+        NCHANNELS=4,
+        SFREQ=100.0,
+        STOP=10.0,
+        NUMEVENTS=5,
+        tmin=0.0,
+        tmax=0.9,
+        random_state=0,
+        baseline=None,
     )
 
 
@@ -33,13 +40,23 @@ def dummy_epochs_obj():
 # On-disk vhdr fixture (one file, scoped to function via tmp_path)
 # ---------------------------------------------------------------------------
 
-@pytest.fixture()
+
+@pytest.fixture
 def dummy_vhdr_file(tmp_path: Path) -> Path:
     """Write a single dummy BrainVision trio and return the .vhdr path."""
     from neurodags.datasets import save_dummy_vhdr
 
     vhdr = tmp_path / "sub-01" / "sub-01_task-rest.vhdr"
-    trio = save_dummy_vhdr(vhdr, dummy_args={"NCHANNELS": 4, "SFREQ": 100.0, "STOP": 10.0, "NUMEVENTS": 5, "random_state": 0})
+    trio = save_dummy_vhdr(
+        vhdr,
+        dummy_args={
+            "NCHANNELS": 4,
+            "SFREQ": 100.0,
+            "STOP": 10.0,
+            "NUMEVENTS": 5,
+            "random_state": 0,
+        },
+    )
     assert trio is not None, "dummy vhdr creation failed"
     return vhdr
 
@@ -57,7 +74,7 @@ _GENERATION_ARGS: dict[str, Any] = {
 }
 
 
-@pytest.fixture()
+@pytest.fixture
 def dummy_pipeline(tmp_path: Path) -> dict[str, Any]:
     """
     Generate a tiny on-disk dataset (2 subjects × 1 session) and return
@@ -83,7 +100,13 @@ def dummy_pipeline(tmp_path: Path) -> dict[str, Any]:
             "NTASKS": 1,
             "NACQS": 1,
             "NRUNS": 1,
-            "PREFIXES": {"subject": "S", "session": "SE", "task": "T", "acquisition": "A", "run": "R"},
+            "PREFIXES": {
+                "subject": "S",
+                "session": "SE",
+                "task": "T",
+                "acquisition": "A",
+                "run": "R",
+            },
             "ROOT": str(data_dir),
         },
         generation_args=_GENERATION_ARGS,

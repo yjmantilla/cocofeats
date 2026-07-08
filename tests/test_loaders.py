@@ -53,7 +53,7 @@ def test_invalid_yaml_raises_valueerror(tmp_path: Path):
     p = tmp_path / "bad.yml"
     # Missing closing bracket
     p.write_text("arr: [1, 2\n", encoding="utf-8")
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="Invalid YAML") as excinfo:
         load_configuration(p)
     assert "Invalid YAML" in str(excinfo.value)
 
@@ -76,7 +76,7 @@ def test_non_mapping_root_raises_typeerror_scalar(tmp_path: Path):
 def test_duplicate_keys_raise_valueerror(tmp_path: Path):
     p = tmp_path / "dup.yml"
     p.write_text("a: 1\na: 2\n", encoding="utf-8")
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="Duplicate key") as excinfo:
         load_configuration(p)
     # Error message should mention duplicate key
     assert "Duplicate key 'a'" in str(excinfo.value)
@@ -88,12 +88,12 @@ def test_duplicate_keys_nested_raise_valueerror(tmp_path: Path):
         "outer:\n" "  x: 1\n" "  x: 2\n",
         encoding="utf-8",
     )
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(ValueError, match="Duplicate key") as excinfo:
         load_configuration(p)
     assert "Duplicate key 'x'" in str(excinfo.value)
 
 
 def test_ioerror_when_file_missing(tmp_path: Path):
     p = tmp_path / "does_not_exist.yml"
-    with pytest.raises(IOError):
+    with pytest.raises(IOError, match="Couldn't read rules file"):
         load_configuration(p)

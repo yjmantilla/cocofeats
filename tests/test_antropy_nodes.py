@@ -10,11 +10,13 @@ antropy = pytest.importorskip("antropy")
 
 
 def _make_dataarray() -> xr.DataArray:
-    data = np.vstack([
-        np.sin(np.linspace(0.0, np.pi, 128)),
-        np.cos(np.linspace(0.0, np.pi, 128)),
-        np.linspace(0.0, 1.0, 128),
-    ])
+    data = np.vstack(
+        [
+            np.sin(np.linspace(0.0, np.pi, 128)),
+            np.cos(np.linspace(0.0, np.pi, 128)),
+            np.linspace(0.0, 1.0, 128),
+        ]
+    )
     return xr.DataArray(data, dims=("spaces", "times"))
 
 
@@ -25,10 +27,9 @@ def test_app_entropy_node_matches_antropy() -> None:
     result = node(da, dim="times", order=2, tolerance=0.2)
     out = result.artifacts[".nc"].item
 
-    expected = np.array([
-        antropy.app_entropy(signal, order=2, tolerance=0.2)
-        for signal in da.values
-    ])
+    expected = np.array(
+        [antropy.app_entropy(signal, order=2, tolerance=0.2) for signal in da.values]
+    )
 
     assert out.dims == ("spaces",)
     np.testing.assert_allclose(out.values, expected, rtol=1e-6, atol=1e-6)
@@ -61,4 +62,3 @@ def test_spectral_entropy_node_requires_sampling_frequency() -> None:
 
     assert out.dims == ("spaces",)
     np.testing.assert_allclose(out.values, expected, rtol=1e-6, atol=1e-6)
-

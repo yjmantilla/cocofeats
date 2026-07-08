@@ -1,4 +1,5 @@
 """Tests for preprocessing nodes using real MNE objects."""
+
 from __future__ import annotations
 
 import mne
@@ -7,10 +8,10 @@ import pytest
 from neurodags.definitions import Artifact, NodeResult
 from neurodags.nodes.preprocessing import basic_preprocessing, keep_channels
 
-
 # ---------------------------------------------------------------------------
 # basic_preprocessing
 # ---------------------------------------------------------------------------
+
 
 def test_basic_preprocessing_returns_noderesulet(dummy_raw_obj):
     raw, _ = dummy_raw_obj
@@ -51,17 +52,17 @@ def test_basic_preprocessing_epoch_single_epoch(dummy_raw_obj):
 
 def test_basic_preprocessing_accepts_noderesulet_input(dummy_raw_obj):
     raw, _ = dummy_raw_obj
-    nr = NodeResult(
-        artifacts={".fif": Artifact(item=raw.copy(), writer=lambda path: None)}
-    )
+    nr = NodeResult(artifacts={".fif": Artifact(item=raw.copy(), writer=lambda path: None)})
     result = basic_preprocessing(nr)
     assert isinstance(result, NodeResult)
     assert ".fif" in result.artifacts
 
 
 def test_basic_preprocessing_noderesulet_missing_fif_raises(dummy_raw_obj):
-    with pytest.raises(ValueError, match=".fif"):
-        basic_preprocessing(NodeResult(artifacts={".nc": Artifact(item=None, writer=lambda p: None)}))
+    with pytest.raises(ValueError, match=r"\.fif"):
+        basic_preprocessing(
+            NodeResult(artifacts={".nc": Artifact(item=None, writer=lambda p: None)})
+        )
 
 
 def test_basic_preprocessing_from_path(dummy_vhdr_file):
@@ -87,6 +88,7 @@ def test_basic_preprocessing_all_options_combined(dummy_raw_obj):
 # keep_channels
 # ---------------------------------------------------------------------------
 
+
 def test_keep_channels_reduces_count(dummy_raw_obj):
     raw, _ = dummy_raw_obj
     ch_names = raw.ch_names[:2]
@@ -97,6 +99,7 @@ def test_keep_channels_reduces_count(dummy_raw_obj):
 
 def test_keep_channels_from_path(dummy_vhdr_file):
     import mne as _mne
+
     raw_info = _mne.io.read_raw(str(dummy_vhdr_file), preload=False, verbose="error")
     ch_names = raw_info.ch_names[:2]
     result = keep_channels(dummy_vhdr_file, channel_names=ch_names)

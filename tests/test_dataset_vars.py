@@ -19,6 +19,7 @@ neurodags substitutes the value from the active dataset entry at runtime.
 Only whole-string values matching the ``$identifier`` pattern are substituted;
 embedded ``$`` characters in paths or other strings are left untouched.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -28,10 +29,10 @@ import pytest
 from neurodags.dag import _resolve_vars, run_derivative
 from neurodags.definitions import DatasetConfig, NodeResult
 
-
 # ---------------------------------------------------------------------------
 # Unit tests: _resolve_vars
 # ---------------------------------------------------------------------------
+
 
 class TestResolveVars:
     def test_simple_string_substitution(self):
@@ -93,6 +94,7 @@ class TestResolveVars:
 # ---------------------------------------------------------------------------
 # Integration: vars flow through run_derivative
 # ---------------------------------------------------------------------------
+
 
 def _ref_base(tmp_path: Path) -> Path:
     ref = tmp_path / "subject" / "sample"
@@ -221,8 +223,8 @@ def test_vars_and_id_refs_coexist(tmp_path):
                 "id": 1,
                 "node": "dummy",
                 "args": {
-                    "param1": "id.0",        # id ref
-                    "param2": "$extra_param", # var ref
+                    "param1": "id.0",  # id ref
+                    "param2": "$extra_param",  # var ref
                 },
             },
         ],
@@ -241,6 +243,7 @@ def test_vars_and_id_refs_coexist(tmp_path):
 # ---------------------------------------------------------------------------
 # DatasetConfig model
 # ---------------------------------------------------------------------------
+
 
 class TestDatasetConfigVars:
     def test_vars_field_accepted(self):

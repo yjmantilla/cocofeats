@@ -1,4 +1,5 @@
 """Extra tests for preprocessing nodes — branches not covered by test_preprocessing_nodes.py."""
+
 from __future__ import annotations
 
 import mne
@@ -7,10 +8,10 @@ import pytest
 from neurodags.definitions import NodeResult
 from neurodags.nodes.preprocessing import basic_preprocessing, keep_channels
 
-
 # ---------------------------------------------------------------------------
 # keep_channels — save=True
 # ---------------------------------------------------------------------------
+
 
 def test_keep_channels_save_true_sets_writer(dummy_raw_obj):
     raw, _ = dummy_raw_obj
@@ -30,6 +31,7 @@ def test_keep_channels_save_false_writer_is_none(dummy_raw_obj):
 # basic_preprocessing — notch_filter
 # ---------------------------------------------------------------------------
 
+
 def test_basic_preprocessing_notch_filter(dummy_raw_obj):
     raw, _ = dummy_raw_obj
     result = basic_preprocessing(raw.copy(), notch_filter={"freqs": [20.0]})
@@ -40,6 +42,7 @@ def test_basic_preprocessing_notch_filter(dummy_raw_obj):
 # ---------------------------------------------------------------------------
 # basic_preprocessing — epoch_config="Events"
 # ---------------------------------------------------------------------------
+
 
 def test_basic_preprocessing_epoch_events(dummy_raw_obj):
     raw, events = dummy_raw_obj
@@ -72,9 +75,11 @@ def test_basic_preprocessing_unknown_epoch_config_raises(dummy_raw_obj):
 # basic_preprocessing — extra_artifacts
 # ---------------------------------------------------------------------------
 
+
 def test_basic_preprocessing_extra_artifacts_produces_report(dummy_raw_obj):
     pytest.importorskip("matplotlib")
     import matplotlib
+
     matplotlib.use("Agg")
     raw, _ = dummy_raw_obj
     result = basic_preprocessing(raw.copy(), extra_artifacts=True)
@@ -84,6 +89,7 @@ def test_basic_preprocessing_extra_artifacts_produces_report(dummy_raw_obj):
 def test_basic_preprocessing_extra_artifacts_with_filter(dummy_raw_obj):
     pytest.importorskip("matplotlib")
     import matplotlib
+
     matplotlib.use("Agg")
     raw, _ = dummy_raw_obj
     result = basic_preprocessing(
@@ -97,6 +103,7 @@ def test_basic_preprocessing_extra_artifacts_with_filter(dummy_raw_obj):
 def test_basic_preprocessing_extra_artifacts_with_notch(dummy_raw_obj):
     pytest.importorskip("matplotlib")
     import matplotlib
+
     matplotlib.use("Agg")
     raw, _ = dummy_raw_obj
     result = basic_preprocessing(
@@ -110,6 +117,7 @@ def test_basic_preprocessing_extra_artifacts_with_notch(dummy_raw_obj):
 def test_basic_preprocessing_extra_artifacts_with_epoch(dummy_raw_obj):
     pytest.importorskip("matplotlib")
     import matplotlib
+
     matplotlib.use("Agg")
     raw, _ = dummy_raw_obj
     result = basic_preprocessing(
@@ -123,6 +131,7 @@ def test_basic_preprocessing_extra_artifacts_with_epoch(dummy_raw_obj):
 def test_basic_preprocessing_extra_artifacts_with_resample(dummy_raw_obj):
     pytest.importorskip("matplotlib")
     import matplotlib
+
     matplotlib.use("Agg")
     raw, _ = dummy_raw_obj
     result = basic_preprocessing(

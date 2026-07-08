@@ -5,15 +5,16 @@ from __future__ import annotations
 import asyncio
 import io
 import sys
-from pathlib import Path
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
 
 pytest.importorskip("textual", reason="textual not installed; skip TUI tests")
 
-from neurodags.tui import (  # noqa: E402
+from textual.widgets import DataTable, Input, Select, Static, TabbedContent, TextArea
+
+from neurodags.tui import (
     NeuroDagsApp,
     _InspectableStatic,
     _parse_int,
@@ -21,7 +22,6 @@ from neurodags.tui import (  # noqa: E402
     _status_sync,
     main,
 )
-from textual.widgets import DataTable, Input, Select, Static, TabbedContent, TextArea  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -81,6 +81,7 @@ class TestRunPipelineSync:
     def test_captures_stderr(self):
         def fake_run(*_a, **_kw):
             import sys
+
             print("err line", file=sys.stderr)
 
         buf = io.StringIO()
@@ -265,7 +266,9 @@ class TestDagTab:
                 app = pilot.app
                 app._config = FAKE_CONFIG
                 await _switch_tab(pilot, "tab-dag")
-                with patch("neurodags.mermaid.pipeline_to_mermaid", return_value="graph LR\n  A-->B"):
+                with patch(
+                    "neurodags.mermaid.pipeline_to_mermaid", return_value="graph LR\n  A-->B"
+                ):
                     await pilot.click("#btn-dag-refresh")
                     await pilot.pause()
                 text = app.query_one("#dag-mermaid", TextArea).text
@@ -308,7 +311,9 @@ class TestDagTab:
             async with NeuroDagsApp().run_test() as pilot:
                 app = pilot.app
                 app._config = FAKE_CONFIG
-                with patch("neurodags.mermaid.pipeline_to_mermaid", side_effect=RuntimeError("bad")):
+                with patch(
+                    "neurodags.mermaid.pipeline_to_mermaid", side_effect=RuntimeError("bad")
+                ):
                     app._refresh_dag()
                     text = app.query_one("#dag-mermaid", TextArea).text
                     assert "Error" in text
@@ -479,9 +484,7 @@ class TestRunPipelineTab:
                 await pilot.pause()
 
                 with (
-                    patch(
-                        "neurodags.tui._run_pipeline_sync", side_effect=RuntimeError("crash")
-                    ),
+                    patch("neurodags.tui._run_pipeline_sync", side_effect=RuntimeError("crash")),
                     patch.object(app, "notify") as m,
                 ):
                     await app._run_pipeline()
@@ -686,8 +689,16 @@ class TestStatusTab:
 
     def test_status_populates_table(self):
         rows = [
-            {"derivative": "StepA", "file_path": "a.vhdr", "plan": _make_status_plan(cached=True, has_error=False)},
-            {"derivative": "StepA", "file_path": "b.vhdr", "plan": _make_status_plan(cached=False, has_error=False)},
+            {
+                "derivative": "StepA",
+                "file_path": "a.vhdr",
+                "plan": _make_status_plan(cached=True, has_error=False),
+            },
+            {
+                "derivative": "StepA",
+                "file_path": "b.vhdr",
+                "plan": _make_status_plan(cached=False, has_error=False),
+            },
         ]
         fake_df = pd.DataFrame(rows)
 
@@ -708,7 +719,13 @@ class TestStatusTab:
 
     def test_status_shows_errored_files(self):
         rows = [
-            {"derivative": "StepA", "file_path": "/data/bad.vhdr", "plan": _make_status_plan(cached=False, has_error=True, error_path="/out/bad@StepA.error")},
+            {
+                "derivative": "StepA",
+                "file_path": "/data/bad.vhdr",
+                "plan": _make_status_plan(
+                    cached=False, has_error=True, error_path="/out/bad@StepA.error"
+                ),
+            },
         ]
         fake_df = pd.DataFrame(rows)
 
@@ -767,13 +784,27 @@ class TestStatusSync:
         assert errored == []
 
     def test_classifies_done_missing_errored(self):
-        fake_df = pd.DataFrame([
-            {"derivative": "StepA", "file_path": "a.vhdr", "plan": _make_status_plan(cached=True, has_error=False)},
-            {"derivative": "StepA", "file_path": "b.vhdr", "plan": _make_status_plan(cached=False, has_error=False)},
-            {"derivative": "StepA", "file_path": "c.vhdr", "plan": _make_status_plan(cached=False, has_error=True, error_path="c.error")},
-        ])
+        fake_df = pd.DataFrame(
+            [
+                {
+                    "derivative": "StepA",
+                    "file_path": "a.vhdr",
+                    "plan": _make_status_plan(cached=True, has_error=False),
+                },
+                {
+                    "derivative": "StepA",
+                    "file_path": "b.vhdr",
+                    "plan": _make_status_plan(cached=False, has_error=False),
+                },
+                {
+                    "derivative": "StepA",
+                    "file_path": "c.vhdr",
+                    "plan": _make_status_plan(cached=False, has_error=True, error_path="c.error"),
+                },
+            ]
+        )
         with patch("neurodags.orchestrators.run_pipeline", return_value=fake_df):
-            rows, grand, errored = _status_sync("p.yml", None, None)
+            _rows, grand, errored = _status_sync("p.yml", None, None)
         assert grand == {"total": 3, "done": 1, "missing": 1, "errored": 1}
         assert len(errored) == 1
         assert errored[0] == ("StepA", "c.vhdr", "c.error")
