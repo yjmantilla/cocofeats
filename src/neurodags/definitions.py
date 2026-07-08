@@ -14,6 +14,7 @@ class DatasetConfig(BaseModel):
     name: str
     file_pattern: str | dict[str, str]  # path or mountpoint mapping
     exclude_pattern: str | None = None
+    drop_split_continuations: bool = True  # drop split-FIF continuation files (keep entry only)
     skip: bool = False
     derivatives_path: str | dict[str, str] | None = None
     vars: dict[str, Any] | None = (

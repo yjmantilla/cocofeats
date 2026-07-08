@@ -25,6 +25,24 @@
 
 ### Fixed
 
+- **Split-FIF continuations no longer scanned as separate source files**: MNE splits
+  recordings larger than ~2 GB across multiple `.fif` files, of which only the first
+  (*entry*) file is an independent recording — the continuations are stitched back in
+  transparently by `mne.io.read_raw_fif(entry)`. The file scanner used a bare
+  `glob.glob`, so every continuation was returned as its own source file and the pipeline
+  ran derivatives on partial data, emitting duplicate/garbage rows. The scanner now drops
+  continuations while keeping the entry, for both conventions: BIDS `_split-01_` (kept) vs
+  `_split-02_`+ (dropped, zero-padding aware), and plain-mne `name.fif` (kept) vs
+  `name-1.fif`/`name-2.fif`+ (dropped). Detection is filename-based and cheap (no file
+  reads); the plain-mne `-N` rule only fires when the entry file is also present in the
+  scan, so legitimately named files such as `sub-01_..._run-2_meg.fif` are never dropped.
+  Controlled by the new `drop_split_continuations` flag (default `True`) — a per-dataset
+  field on `DatasetConfig` (opt out one dataset) and a parameter on
+  `get_files_from_pattern` / `get_all_files_across_datasets` /
+  `get_all_files_from_pipeline_configuration` (global switch). The number of dropped
+  continuations is logged. (`iterators.find_split_continuations`,
+  `iterators.get_files_from_pattern`, `definitions.DatasetConfig.drop_split_continuations`)
+
 - **Sub-derivative cache respected when parent has `overwrite: True`**: previously,
   a derivative with `overwrite: True` forced `cached_here = False` for all of its
   sub-derivative inputs, causing them to re-execute even when they had `overwrite: False`
