@@ -1,19 +1,19 @@
 """Tests for _snapshot_pipeline_config and its integration with run_pipeline."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-import pytest
 import yaml
 
 from neurodags.definitions import DatasetConfig
 from neurodags.orchestrators import _snapshot_pipeline_config, run_pipeline
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_pipeline_yaml(
     tmp_path: Path,
@@ -59,13 +59,17 @@ def _make_pipeline_yaml(
 
 def _load_datasets(pipeline_path: Path) -> dict:
     from neurodags.datasets import get_datasets_and_mount_point_from_pipeline_configuration
-    datasets_configs, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(pipeline_path)
+
+    datasets_configs, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(
+        pipeline_path
+    )
     return datasets_configs, mount_point
 
 
 # ---------------------------------------------------------------------------
 # _snapshot_pipeline_config — code/ directory creation
 # ---------------------------------------------------------------------------
+
 
 def test_snapshot_creates_code_dir(tmp_path):
     pipeline_path, _, _ = _make_pipeline_yaml(tmp_path)
@@ -81,6 +85,7 @@ def test_snapshot_creates_code_dir(tmp_path):
 # ---------------------------------------------------------------------------
 # _snapshot_pipeline_config — pipeline YAML copied
 # ---------------------------------------------------------------------------
+
 
 def test_snapshot_copies_pipeline_yaml(tmp_path):
     pipeline_path, _, _ = _make_pipeline_yaml(tmp_path)
@@ -98,6 +103,7 @@ def test_snapshot_copies_pipeline_yaml(tmp_path):
 # _snapshot_pipeline_config — datasets YAML copied
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_copies_datasets_yaml(tmp_path):
     pipeline_path, datasets_path, _ = _make_pipeline_yaml(tmp_path)
     config = yaml.safe_load(pipeline_path.read_text())
@@ -114,10 +120,9 @@ def test_snapshot_copies_datasets_yaml(tmp_path):
 # _snapshot_pipeline_config — new_definitions file copied
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_copies_new_definitions(tmp_path):
-    pipeline_path, _, new_defs_path = _make_pipeline_yaml(
-        tmp_path, new_defs_name="custom_nodes.py"
-    )
+    pipeline_path, _, new_defs_path = _make_pipeline_yaml(tmp_path, new_defs_name="custom_nodes.py")
     config = yaml.safe_load(pipeline_path.read_text())
     datasets_configs, mount_point = _load_datasets(pipeline_path)
 
@@ -167,6 +172,7 @@ def test_snapshot_new_definitions_list(tmp_path):
 # _snapshot_pipeline_config — datasets_configuration override is copied
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_copies_datasets_override(tmp_path):
     pipeline_path, _, _ = _make_pipeline_yaml(tmp_path)
     config = yaml.safe_load(pipeline_path.read_text())
@@ -201,6 +207,7 @@ def test_snapshot_copies_datasets_override(tmp_path):
 # _snapshot_pipeline_config — neurodags_env.json written with required keys
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_writes_env_json(tmp_path):
     pipeline_path, _, _ = _make_pipeline_yaml(tmp_path)
     config = yaml.safe_load(pipeline_path.read_text())
@@ -231,6 +238,7 @@ def test_snapshot_env_json_has_version(tmp_path):
 # _snapshot_pipeline_config — skips datasets without derivatives_path
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_skips_dataset_without_derivatives_path(tmp_path):
     pipeline_path, _, _ = _make_pipeline_yaml(tmp_path)
     config = yaml.safe_load(pipeline_path.read_text())
@@ -251,6 +259,7 @@ def test_snapshot_skips_dataset_without_derivatives_path(tmp_path):
 # ---------------------------------------------------------------------------
 # _snapshot_pipeline_config — deduplicates shared derivatives_path
 # ---------------------------------------------------------------------------
+
 
 def test_snapshot_deduplicates_shared_derivatives_path(tmp_path):
     deriv_dir = tmp_path / "shared_deriv"
@@ -284,6 +293,7 @@ def test_snapshot_deduplicates_shared_derivatives_path(tmp_path):
 # _snapshot_pipeline_config — multiple datasets each get their own code dir
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_multiple_datasets_get_own_code_dir(tmp_path):
     deriv_a = tmp_path / "deriv_a"
     deriv_a.mkdir()
@@ -314,6 +324,7 @@ def test_snapshot_multiple_datasets_get_own_code_dir(tmp_path):
 # _snapshot_pipeline_config — missing new_definitions file silently skipped
 # ---------------------------------------------------------------------------
 
+
 def test_snapshot_missing_new_defs_file_silently_skipped(tmp_path):
     pipeline_path, _, _ = _make_pipeline_yaml(tmp_path)
     config = yaml.safe_load(pipeline_path.read_text())
@@ -330,6 +341,7 @@ def test_snapshot_missing_new_defs_file_silently_skipped(tmp_path):
 # ---------------------------------------------------------------------------
 # run_pipeline integration — snapshot triggered on real run, not dry run
 # ---------------------------------------------------------------------------
+
 
 def test_run_pipeline_triggers_snapshot(tmp_path, dummy_pipeline):
     """run_pipeline writes code/ next to derivatives when given a YAML path."""
@@ -348,10 +360,22 @@ def test_run_pipeline_triggers_snapshot(tmp_path, dummy_pipeline):
             "NTASKS": 1,
             "NACQS": 1,
             "NRUNS": 1,
-            "PREFIXES": {"subject": "S", "session": "SE", "task": "T", "acquisition": "A", "run": "R"},
+            "PREFIXES": {
+                "subject": "S",
+                "session": "SE",
+                "task": "T",
+                "acquisition": "A",
+                "run": "R",
+            },
             "ROOT": str(data_dir),
         },
-        generation_args={"NCHANNELS": 4, "SFREQ": 100.0, "STOP": 5.0, "NUMEVENTS": 2, "random_state": 0},
+        generation_args={
+            "NCHANNELS": 4,
+            "SFREQ": 100.0,
+            "STOP": 5.0,
+            "NUMEVENTS": 2,
+            "random_state": 0,
+        },
     )
 
     datasets_cfg = {
@@ -397,10 +421,22 @@ def test_run_pipeline_dry_run_does_not_snapshot(tmp_path):
             "NTASKS": 1,
             "NACQS": 1,
             "NRUNS": 1,
-            "PREFIXES": {"subject": "S", "session": "SE", "task": "T", "acquisition": "A", "run": "R"},
+            "PREFIXES": {
+                "subject": "S",
+                "session": "SE",
+                "task": "T",
+                "acquisition": "A",
+                "run": "R",
+            },
             "ROOT": str(data_dir),
         },
-        generation_args={"NCHANNELS": 4, "SFREQ": 100.0, "STOP": 5.0, "NUMEVENTS": 2, "random_state": 0},
+        generation_args={
+            "NCHANNELS": 4,
+            "SFREQ": 100.0,
+            "STOP": 5.0,
+            "NUMEVENTS": 2,
+            "random_state": 0,
+        },
     )
 
     datasets_cfg = {

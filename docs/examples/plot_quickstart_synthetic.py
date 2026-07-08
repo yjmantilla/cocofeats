@@ -32,7 +32,11 @@ import pandas as pd
 import yaml
 
 from neurodags.datasets import generate_dummy_dataset
-from neurodags.orchestrators import build_derivative_dataframe, iterate_derivative_pipeline, run_pipeline
+from neurodags.orchestrators import (
+    build_derivative_dataframe,
+    iterate_derivative_pipeline,
+    run_pipeline,
+)
 
 WORKDIR = Path(tempfile.mkdtemp(prefix="neurodags_quickstart_"))
 DATA_DIR = WORKDIR / "rawdata"

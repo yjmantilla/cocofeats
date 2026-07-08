@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import numpy as np
 import xarray as xr
-
 from numpy.testing import assert_allclose
 
 from neurodags.definitions import Artifact, NodeResult
-from neurodags.nodes.spectral import bandpower, band_ratios
+from neurodags.nodes.spectral import band_ratios, bandpower
 
 
 def _make_psd() -> xr.DataArray:

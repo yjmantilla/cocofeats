@@ -111,10 +111,12 @@ def test_apply_1d_handles_mne_raw() -> None:
     pytest.importorskip("scipy", reason="SciPy required for MNE test")
 
     sfreq = 100.0
-    data = np.vstack([
-        np.linspace(0.0, 1.0, 200),
-        np.linspace(1.0, 2.0, 200),
-    ])
+    data = np.vstack(
+        [
+            np.linspace(0.0, 1.0, 200),
+            np.linspace(1.0, 2.0, 200),
+        ]
+    )
     info = mne.create_info(ch_names=["C3", "C4"], sfreq=sfreq, ch_types="eeg")
     raw = mne.io.RawArray(data, info, verbose="error")
 
@@ -140,14 +142,14 @@ def test_xarray_factory_registered_node_supports_dotted_path() -> None:
 def test_apply_1d_raises_on_missing_dimension() -> None:
     arr = _make_dataarray()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="not found in input dims"):
         apply_1d(arr, dim="frequency", pure_function=np.mean)
 
 
 def test_apply_1d_invalid_mode() -> None:
     arr = _make_dataarray()
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="mode must be either"):
         apply_1d(arr, dim="times", pure_function=np.mean, mode="invalid")
 
 
@@ -157,7 +159,7 @@ def test_apply_1d_raises_on_bad_result_coords_length() -> None:
     def stats(vector: np.ndarray) -> tuple[float, float]:
         return float(vector.mean()), float(vector.std())
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Length of result_coords"):
         apply_1d(
             arr,
             dim="times",
@@ -285,6 +287,7 @@ def test_apply_1d_per_slice_argument_rejects_iteration_dimension() -> None:
             mode="iterative",
         )
 
+
 if __name__ == "__main__":
-#    pytest.main([__file__])
+    #    pytest.main([__file__])
     pytest.main(["-v", "-s", "-q", "--no-cov", "--pdb", __file__])

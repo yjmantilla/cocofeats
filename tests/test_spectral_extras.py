@@ -1,4 +1,5 @@
 """Extra coverage tests for spectral nodes."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -17,10 +18,10 @@ from neurodags.nodes.spectral import (
     mne_spectrum_array,
 )
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def psd_da():
@@ -70,6 +71,7 @@ def fooof_result(fooof_psd_da):
 # _resolve_psd_dataarray — error/edge branches
 # ---------------------------------------------------------------------------
 
+
 def test_resolve_psd_xarray_returns_itself(psd_da):
     assert _resolve_psd_dataarray(psd_da) is psd_da
 
@@ -82,7 +84,7 @@ def test_resolve_psd_noderesulet_xarray(psd_da):
 
 def test_resolve_psd_noderesulet_missing_nc_raises():
     nr = NodeResult(artifacts={".fif": Artifact(item=None, writer=lambda p: None)})
-    with pytest.raises(ValueError, match=".nc"):
+    with pytest.raises(ValueError, match=r"\.nc"):
         _resolve_psd_dataarray(nr)
 
 
@@ -108,9 +110,10 @@ def test_resolve_psd_invalid_type_raises():
 # mne_spectrum — missing branches
 # ---------------------------------------------------------------------------
 
+
 def test_mne_spectrum_noderesulet_missing_fif_raises():
     nr = NodeResult(artifacts={".nc": Artifact(item=None, writer=lambda p: None)})
-    with pytest.raises(ValueError, match=".fif"):
+    with pytest.raises(ValueError, match=r"\.fif"):
         mne_spectrum(nr)
 
 
@@ -123,6 +126,7 @@ def test_mne_spectrum_from_path(dummy_vhdr_file):
 def test_mne_spectrum_extra_artifacts_raw(dummy_raw_obj):
     pytest.importorskip("matplotlib")
     import matplotlib
+
     matplotlib.use("Agg")
     raw, _ = dummy_raw_obj
     result = mne_spectrum(raw.copy(), extra_artifacts=True)
@@ -132,6 +136,7 @@ def test_mne_spectrum_extra_artifacts_raw(dummy_raw_obj):
 def test_mne_spectrum_extra_artifacts_epochs(dummy_epochs_obj):
     pytest.importorskip("matplotlib")
     import matplotlib
+
     matplotlib.use("Agg")
     epochs = dummy_epochs_obj
     result = mne_spectrum(epochs, extra_artifacts=True)
@@ -142,9 +147,10 @@ def test_mne_spectrum_extra_artifacts_epochs(dummy_epochs_obj):
 # mne_spectrum_array — missing branches
 # ---------------------------------------------------------------------------
 
+
 def test_mne_spectrum_array_noderesulet_missing_fif_raises():
     nr = NodeResult(artifacts={".nc": Artifact(item=None, writer=lambda p: None)})
-    with pytest.raises(ValueError, match=".fif"):
+    with pytest.raises(ValueError, match=r"\.fif"):
         mne_spectrum_array(nr, method="welch")
 
 
@@ -186,6 +192,7 @@ def test_mne_spectrum_array_multitaper_with_weights(dummy_epochs_obj):
 # fooof — basic run + error branches
 # ---------------------------------------------------------------------------
 
+
 def test_fooof_returns_noderesulet(fooof_psd_da):
     result = fooof(fooof_psd_da)
     assert isinstance(result, NodeResult)
@@ -219,7 +226,13 @@ def test_fooof_explicit_freqs(fooof_psd_da):
 
 
 def test_fooof_freq_res(fooof_psd_da):
-    result = fooof(fooof_psd_da, fooof_options={"FOOOF": {}, "save": {"save_results": True, "save_settings": True, "save_data": False}})
+    result = fooof(
+        fooof_psd_da,
+        fooof_options={
+            "FOOOF": {},
+            "save": {"save_results": True, "save_settings": True, "save_data": False},
+        },
+    )
     assert isinstance(result, NodeResult)
 
 
@@ -251,6 +264,7 @@ def test_fooof_from_noderesulet(fooof_psd_da):
 # ---------------------------------------------------------------------------
 # fooof_scalars — basic run + error branches
 # ---------------------------------------------------------------------------
+
 
 def test_fooof_scalars_all(fooof_result):
     ds = fooof_result.artifacts[".nc"].item
@@ -303,6 +317,7 @@ def test_fooof_scalars_from_noderesulet(fooof_result):
 # ---------------------------------------------------------------------------
 # fooof_component — basic run + error branches
 # ---------------------------------------------------------------------------
+
 
 def test_fooof_component_aperiodic(fooof_result):
     ds = fooof_result.artifacts[".nc"].item
@@ -363,11 +378,10 @@ def test_fooof_component_from_noderesulet(fooof_result):
 # bandpower — error branches + input variants
 # ---------------------------------------------------------------------------
 
+
 def test_bandpower_missing_freq_dim_raises(psd_da):
     with pytest.raises(ValueError, match="not present in input dims"):
         bandpower(psd_da, freq_dim="nonexistent")
-
-
 
 
 def test_bandpower_nonfinite_band_raises(psd_da):
@@ -405,10 +419,10 @@ def test_bandpower_source_metadata_propagated(psd_da):
 # band_ratios — error branches + input variants
 # ---------------------------------------------------------------------------
 
+
 def test_band_ratios_missing_freqband_dim_raises(psd_da):
     with pytest.raises(ValueError, match="not present in input dims"):
         band_ratios(psd_da, freqband_dim="nonexistent")
-
 
 
 def test_band_ratios_explicit_combinations(bandpower_da):

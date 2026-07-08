@@ -93,6 +93,7 @@ autoapi_options = [
     # "imported-members",   # enable if you also want re-exported/imported names
 ]
 
+
 def skip_troublesome_tui_members(app, what, name, obj, skip, options):
     # Skip CSS and BINDINGS which cause formatting issues
     if any(x in name for x in ("DEFAULT_CSS", "CSS", "BINDINGS")):
@@ -116,8 +117,10 @@ def skip_troublesome_tui_members(app, what, name, obj, skip, options):
         return True
     return skip
 
+
 def setup(app):
     app.connect("autoapi-skip-member", skip_troublesome_tui_members)
+
 
 # Ignore docs generation for tests/examples if desired (pattern applies to source crawl)
 autoapi_ignore = [

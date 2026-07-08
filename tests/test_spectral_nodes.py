@@ -1,4 +1,5 @@
 """Tests for spectral nodes using real MNE Raw and Epochs objects."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -7,10 +8,10 @@ import xarray as xr
 from neurodags.definitions import Artifact, NodeResult
 from neurodags.nodes.spectral import mne_spectrum, mne_spectrum_array
 
-
 # ---------------------------------------------------------------------------
 # mne_spectrum (compute_psd wrapper)
 # ---------------------------------------------------------------------------
+
 
 def test_mne_spectrum_raw_returns_2d_xarray(dummy_raw_obj):
     raw, _ = dummy_raw_obj
@@ -51,6 +52,7 @@ def test_mne_spectrum_fmax_clipped_to_nyquist(dummy_raw_obj):
 # ---------------------------------------------------------------------------
 # mne_spectrum_array (welch / multitaper)
 # ---------------------------------------------------------------------------
+
 
 def test_mne_spectrum_array_welch_raw_output_shape(dummy_raw_obj):
     raw, _ = dummy_raw_obj
