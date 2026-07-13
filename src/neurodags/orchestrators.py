@@ -2,7 +2,7 @@ import inspect
 import os
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -41,6 +41,11 @@ class _FileJob:
     dry_run: bool
     skip_errors: bool = False
     custom_node_paths: tuple[str, ...] = ()
+    # Full DerivativeDefinitions map, re-registered inside each worker so that
+    # uncached inter-derivative references resolve (workers start with an empty
+    # derivative registry — see #18). Mirrors how custom_node_paths re-registers
+    # nodes.
+    derivative_definitions: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(slots=False)  # break parallelization?
@@ -95,6 +100,12 @@ def _resolve_reference_base(
 def _process_file_job(job: _FileJob) -> _FileResult:
     if job.custom_node_paths:
         load_node_definitions(job.custom_node_paths)
+
+    # Re-register YAML derivatives in this (possibly fresh) worker process so that
+    # uncached inter-derivative references (derivative: A.nc) resolve via the
+    # registry instead of raising "Unknown derivative" (#18).
+    if job.derivative_definitions:
+        register_derivatives_from_dict({"DerivativeDefinitions": job.derivative_definitions})
 
     dataset_config = DatasetConfig(**job.dataset_config)
     try:
@@ -345,6 +356,8 @@ def iterate_derivative_pipeline(
     backend = joblib_backend or config_dict.get("joblib_backend")
     prefer = joblib_prefer or config_dict.get("joblib_prefer")
 
+    derivative_definitions_map = config_dict.get("DerivativeDefinitions", {}) or {}
+
     jobs: list[_FileJob] = []
     for index, dataset_name, file_path in all_files:
         log.debug("Processing file", index=index, dataset=dataset_name, file_path=file_path)
@@ -371,6 +384,7 @@ def iterate_derivative_pipeline(
                 dry_run=dry_run,
                 skip_errors=skip_errors,
                 custom_node_paths=custom_node_paths,
+                derivative_definitions=derivative_definitions_map,
             )
         )
 
@@ -916,6 +930,12 @@ def _collect_dataframe_file(
 
     configure_logging()  # no-op in main process; configures structlog in fresh loky workers
     from neurodags.definitions import DatasetConfig
+
+    # Re-register YAML derivatives in this (possibly fresh) worker so uncached
+    # inter-derivative references resolve via the registry rather than raising
+    # "Unknown derivative" (#18). Idempotent (override=True) in the main process.
+    if derivative_definitions:
+        register_derivatives_from_dict({"DerivativeDefinitions": derivative_definitions})
 
     dataset_config = DatasetConfig(**dataset_config_dict)
 
