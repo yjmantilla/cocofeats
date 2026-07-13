@@ -206,7 +206,9 @@ def slice_xarray(xarray_data, dim, start=None, end=None):
 
 
 @register_node(name="aggregate_across_dimension", override=True)
-def aggregate_across_dimension(xarray_data, dim, operation="mean", args=None):
+def aggregate_across_dimension(
+    xarray_data, dim, operation="mean", args=None, on_dropped="warn", emit_counts=False
+):
     """
     Aggregate data across a specified dimension of an xarray DataArray using a given operation.
 
@@ -220,6 +222,18 @@ def aggregate_across_dimension(xarray_data, dim, operation="mean", args=None):
         The aggregation operation to perform ('mean', 'sum', 'max', 'min', etc.).
     args : dict, optional
         Additional arguments to pass to the aggregation function.
+    on_dropped : {"ignore", "warn", "raise"}, optional
+        Policy for when the reduction silently drops non-finite (NaN) values along
+        ``dim`` because ``skipna`` is in effect (xarray's default for float data).
+        ``"warn"`` (default) logs a ``log.warning`` with the dropped count; ``"raise"``
+        raises a ``ValueError`` so pipelines that expect complete data fail fast;
+        ``"ignore"`` restores the previous silent behaviour. No effect when nothing is
+        dropped (no NaN, integer data, or ``skipna=False``).
+    emit_counts : bool, optional
+        When True, attach ``n_used`` (finite values reduced over ``dim``) and
+        ``n_dropped`` (NaN values skipped) as coordinates on the aggregated array, so
+        the reliability of each aggregated value is queryable downstream. The artifact
+        remains a single-variable ``.nc`` DataArray. Default False.
 
     Returns
     -------
@@ -240,14 +254,47 @@ def aggregate_across_dimension(xarray_data, dim, operation="mean", args=None):
     if not isinstance(xarray_data, xr.DataArray):
         raise ValueError("Input must be an xarray DataArray.")
 
+    if on_dropped not in ("ignore", "warn", "raise"):
+        raise ValueError(
+            f"on_dropped must be one of 'ignore', 'warn', 'raise'; got {on_dropped!r}."
+        )
+
     if args is None:
         args = {}
 
     if not hasattr(xarray_data, operation):
         raise ValueError(f"Operation '{operation}' is not valid for xarray DataArray.")
 
+    # A reduction only silently drops NaN when skipna is in effect. xarray defaults
+    # skipna to True for floating-point data; integer/boolean data has no NaN to drop.
+    would_skip_nan = args.get("skipna", np.issubdtype(xarray_data.dtype, np.floating))
+
+    n_used = n_dropped = None
+    if would_skip_nan and dim in xarray_data.dims:
+        n_used = xarray_data.notnull().sum(dim=dim)
+        n_dropped = xarray_data.sizes[dim] - n_used
+        total_dropped = int(n_dropped.sum())
+        if total_dropped > 0:
+            if on_dropped == "raise":
+                raise ValueError(
+                    f"aggregate_across_dimension: operation '{operation}' would drop "
+                    f"{total_dropped} non-finite value(s) along '{dim}' under skipna "
+                    f"(on_dropped='raise')."
+                )
+            if on_dropped == "warn":
+                log.warning(
+                    "aggregate_across_dimension dropped non-finite values under skipna",
+                    dim=dim,
+                    operation=operation,
+                    n_dropped=total_dropped,
+                    n_total=int(xarray_data.size),
+                )
+
     agg_func = getattr(xarray_data, operation)
     aggregated_data = agg_func(dim=dim, **args)
+
+    if emit_counts and n_used is not None:
+        aggregated_data = aggregated_data.assign_coords(n_used=n_used, n_dropped=n_dropped)
 
     # return the new xarray in ncdf4 format
     artifacts = {
