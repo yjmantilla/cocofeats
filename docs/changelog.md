@@ -25,6 +25,18 @@
 
 ### Fixed
 
+- **Parallel workers can now resolve uncached inter-derivative references** (#18): YAML
+  `DerivativeDefinitions` were registered only in the main process, so with `--n-jobs > 1`
+  a fresh (loky) worker that had to *compute* a referenced sub-derivative — rather than
+  read it from disk cache — raised `ValueError: Unknown derivative '<Name>.nc'`. The bug
+  was masked whenever the intermediate was already cached (the disk-cache path needs no
+  registry) and disappeared under `--n-jobs 1`. The full `DerivativeDefinitions` map is
+  now threaded into each `_FileJob` and re-registered at the top of `_process_file_job`
+  (mirroring how `custom_node_paths` re-registers nodes), and `_collect_dataframe_file`
+  re-registers the map it already receives — so both the `run` and `dataframe` paths
+  resolve fresh nested derivatives in parallel. (`orchestrators._FileJob`,
+  `orchestrators._process_file_job`, `orchestrators._collect_dataframe_file`)
+
 - **`aggregate_across_dimension` no longer silently drops non-finite values** (#19): a
   reduction such as `mean`/`std` runs with xarray's default `skipna=True`, so NaN values
   along the aggregated dimension were dropped with no record — a per-channel mean over 2

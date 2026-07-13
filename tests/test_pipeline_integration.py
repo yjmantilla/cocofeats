@@ -250,6 +250,33 @@ def test_build_derivative_dataframe_parallel_long_matches_serial(dummy_pipeline)
 
 
 # ---------------------------------------------------------------------------
+# Parallel workers resolve uncached inter-derivative references (issue #18)
+# ---------------------------------------------------------------------------
+
+
+def test_iterate_parallel_uncached_subderivative_chain(dummy_pipeline):
+    # Spectrum depends on an uncached BasicPrep.fif. With n_jobs=2 the loky workers
+    # start with an empty derivative registry; before the fix the worker raised
+    # "Unknown derivative 'BasicPrep.fif'" instead of recomputing it. Nothing is
+    # precomputed here, so the worker must resolve BasicPrep via the registry.
+    cfg = dummy_pipeline["config"]
+    out_dir = dummy_pipeline["out_dir"]
+    iterate_derivative_pipeline(cfg, "Spectrum", n_jobs=2, raise_on_error=True)
+    assert list(out_dir.rglob("*@Spectrum.nc"))
+
+
+def test_dataframe_parallel_uncached_subderivative_chain(dummy_pipeline):
+    # Same bug via the dataframe path: BandPowerMean -> Spectrum.nc -> BasicPrep.fif,
+    # all uncached, collected with n_jobs=2.
+    cfg = dummy_pipeline["config"]
+    df = build_derivative_dataframe(
+        cfg, include_derivatives=["BandPowerMean"], n_jobs=2, raise_on_error=True
+    )
+    assert len(df) > 0
+    assert not [c for c in df.columns if c.endswith("__error")]
+
+
+# ---------------------------------------------------------------------------
 # Error handling in _collect_dataframe_file
 # ---------------------------------------------------------------------------
 
