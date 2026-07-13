@@ -126,3 +126,25 @@ BandPowerMean:
         dim: epochs
         operation: mean
 ```
+
+### Non-finite values when aggregating
+
+`aggregate_across_dimension` reduces with xarray's default `skipna=True`, so NaN values
+along the aggregated dimension (e.g. epochs where a feature failed to compute) are dropped
+from the reduction. By default the node logs a warning with the dropped count; two `args`
+control this:
+
+```yaml
+    - id: 1
+      node: aggregate_across_dimension
+      args:
+        xarray_data: id.0
+        dim: epochs
+        operation: mean
+        on_dropped: raise      # "warn" (default) | "raise" (fail fast) | "ignore"
+        emit_counts: true      # attach n_used / n_dropped coords per aggregated value
+```
+
+Use `on_dropped: raise` when a derivative must aggregate complete data, and
+`emit_counts: true` to carry the per-value `n_used`/`n_dropped` counts into the dataframe
+so the reliability of each aggregate is queryable.

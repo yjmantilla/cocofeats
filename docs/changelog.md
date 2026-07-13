@@ -25,6 +25,18 @@
 
 ### Fixed
 
+- **`aggregate_across_dimension` no longer silently drops non-finite values** (#19): a
+  reduction such as `mean`/`std` runs with xarray's default `skipna=True`, so NaN values
+  along the aggregated dimension were dropped with no record — a per-channel mean over 2
+  surviving epochs looked identical downstream to one over 13, and since missingness is
+  often not-at-random (e.g. failed FOOOF fits concentrating in one condition) this was a
+  data-quality/leakage hazard. The node now takes `on_dropped` (`"warn"` default →
+  `log.warning` with the dropped count; `"raise"` to fail fast; `"ignore"` for the old
+  behaviour) and an opt-in `emit_counts` flag that attaches `n_used`/`n_dropped`
+  coordinates to the aggregated array so per-value reliability is queryable. Fires only
+  when a reduction actually skips NaN (float data, `skipna` in effect); pipelines with no
+  non-finite values are unchanged. (`operations.aggregate_across_dimension`)
+
 - **Split-FIF continuations no longer scanned as separate source files**: MNE splits
   recordings larger than ~2 GB across multiple `.fif` files, of which only the first
   (*entry*) file is an independent recording — the continuations are stitched back in

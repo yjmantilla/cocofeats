@@ -5,6 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 import xarray as xr
+from structlog.testing import capture_logs
 
 from neurodags.definitions import Artifact, NodeResult
 from neurodags.nodes.operations import (
@@ -288,3 +289,80 @@ def test_aggregate_with_args(simple_da):
     )
     arr = result.artifacts[".nc"].item
     assert isinstance(arr, xr.DataArray)
+
+
+# --- non-finite / skipna visibility (issue #19) ----------------------------
+
+
+@pytest.fixture
+def da_with_nan():
+    # NaN at (times=1, channel=a) and (times=2, channel=b) -> 1 dropped per channel
+    return xr.DataArray(
+        np.array([[1.0, 2.0], [np.nan, 4.0], [5.0, np.nan], [7.0, 8.0]]),
+        dims=("times", "channel"),
+        coords={"times": [0, 1, 2, 3], "channel": ["a", "b"]},
+    )
+
+
+def test_aggregate_raise_on_dropped_nan(da_with_nan):
+    with pytest.raises(ValueError, match="non-finite"):
+        aggregate_across_dimension(da_with_nan, dim="times", operation="mean", on_dropped="raise")
+
+
+def test_aggregate_warn_on_dropped_nan(da_with_nan):
+    with capture_logs() as logs:
+        aggregate_across_dimension(da_with_nan, dim="times", operation="mean")  # default warn
+    warnings = [
+        e for e in logs if e.get("log_level") == "warning" and "dropped non-finite" in e["event"]
+    ]
+    assert len(warnings) == 1
+    assert warnings[0]["n_dropped"] == 2
+
+
+def test_aggregate_ignore_on_dropped_nan(da_with_nan):
+    with capture_logs() as logs:
+        result = aggregate_across_dimension(
+            da_with_nan, dim="times", operation="mean", on_dropped="ignore"
+        )
+    assert not [e for e in logs if "dropped non-finite" in e.get("event", "")]
+    arr = result.artifacts[".nc"].item
+    # skipna mean is still applied: channel a -> (1+5+7)/3
+    assert float(arr.sel(channel="a")) == pytest.approx(13.0 / 3.0)
+
+
+def test_aggregate_emit_counts(da_with_nan):
+    result = aggregate_across_dimension(
+        da_with_nan, dim="times", operation="mean", emit_counts=True
+    )
+    arr = result.artifacts[".nc"].item
+    assert "n_used" in arr.coords
+    assert "n_dropped" in arr.coords
+    assert arr["n_used"].sel(channel="a").item() == 3
+    assert arr["n_dropped"].sel(channel="a").item() == 1
+    assert arr["n_dropped"].sel(channel="b").item() == 1
+
+
+def test_aggregate_no_nan_is_unchanged(simple_da):
+    with capture_logs() as logs:
+        result = aggregate_across_dimension(simple_da, dim="times", operation="mean")
+    assert not [e for e in logs if "dropped non-finite" in e.get("event", "")]
+    arr = result.artifacts[".nc"].item
+    assert "n_used" not in arr.coords
+
+
+def test_aggregate_skipna_false_no_drop_policy(da_with_nan):
+    # skipna=False -> NaN is not dropped (it propagates), so on_dropped must not fire
+    result = aggregate_across_dimension(
+        da_with_nan,
+        dim="times",
+        operation="mean",
+        on_dropped="raise",
+        args={"skipna": False},
+    )
+    arr = result.artifacts[".nc"].item
+    assert bool(np.isnan(arr.sel(channel="a")))
+
+
+def test_aggregate_invalid_on_dropped_raises(simple_da):
+    with pytest.raises(ValueError, match="on_dropped must be one of"):
+        aggregate_across_dimension(simple_da, dim="times", operation="mean", on_dropped="bogus")
