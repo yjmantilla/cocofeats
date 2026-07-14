@@ -11,11 +11,39 @@ from pathlib import Path
 
 project = "neurodags"
 
-# Full version from installed dist (hatch-vcs stamps this)
-try:
-    release = _v("neurodags")
-except PackageNotFoundError:
-    release = "0+unknown"
+
+def _nearest_release_tag() -> str | None:
+    """Return the latest ``vX.Y.Z`` release tag reachable from HEAD (without the
+    leading ``v``), or ``None`` if git/tags are unavailable.
+
+    The docs site tracks ``main``, which is usually a few commits ahead of the
+    last release, so the hatch-vcs-stamped dist version would read as a dev
+    version (e.g. ``0.3.1.dev1+g...``). For public docs we prefer to show the
+    released version. Requires tags to be present (the Docs workflow checks out
+    with ``fetch-depth: 0``).
+    """
+    try:
+        tag = (
+            subprocess.check_output(
+                ["git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*"],
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+        return tag.lstrip("v") or None
+    except Exception:
+        return None
+
+
+# Prefer the nearest release tag (clean X.Y.Z); fall back to the hatch-vcs-stamped
+# dist version when git/tags are unavailable (e.g. an sdist install).
+release = _nearest_release_tag()
+if not release:
+    try:
+        release = _v("neurodags")
+    except PackageNotFoundError:
+        release = "0+unknown"
 
 # Short X.Y
 version = ".".join(release.split(".")[:2])
