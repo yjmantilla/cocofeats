@@ -67,7 +67,12 @@ Assemble computation results into ML-ready DataFrames.
 - **max files/dataset**: Limit the number of files.
 - **Assemble**: Build the DataFrame and display a preview in the table.
 
-### 6. NC Viewer Tab
+### 6. Status Tab
+Check per-derivative processing status for the loaded pipeline (the TUI equivalent of the `neurodags status` command).
+- **Select derivative**: Choose a derivative to inspect, or leave on `All (DerivativeList)`.
+- **Refresh**: Scan outputs and populate the table with *done* / *skipped* / *missing* / *errored* counts per derivative, plus a summary line and any error paths.
+
+### 7. NC Viewer Tab
 Launch the interactive Dash explorer for results.
 - **.fif or .nc file path**: Path to a NetCDF or MNE FIF file.
 - **Launch Dash Explorer**: Starts the Dash-Plotly explorer in the background. You can then open your browser at `http://127.0.0.1:8050` to interactively explore the data.

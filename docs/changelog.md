@@ -4,6 +4,25 @@
 
 ### Added
 
+- **`neurodags status` command**: new inspection subcommand reporting, per derivative, how
+  many source files are *done* / *skipped* / *missing* / *errored* — without opening a CSV.
+  Supports `--derivative` selection, `--list-missing` / `--list-errors` to print the offending
+  paths, `--format json` for machine-readable output (`config`, `n_files`, per-derivative
+  counts, `grand_total`, and a `complete` boolean), and `--n-jobs` for parallel status
+  collection. The *skipped* column reports derivatives with a `.skip` marker (see
+  `SkipDerivative`) distinctly from *missing*. (`cli._cmd_status`, `cli._status_classify`)
+
+- **Parallel processing (`--n-jobs`)**: `run`, `dry-run`, `dataframe`, and `status` process
+  files in parallel via joblib. `--n-jobs N` (or `-1` for all cores; `1`/`None` stays serial),
+  with optional `--joblib-backend` / `--joblib-prefer`. Per-file parallelism uses separate
+  processes (loky) to avoid HDF5/NetCDF4 thread-safety issues. Also exposed as `n_jobs=` on
+  `iterate_derivative_pipeline` / `run_pipeline` / `build_derivative_dataframe`.
+
+- **Global logging options `--log-level` / `--log-file`**: set console verbosity
+  (`DEBUG`/`INFO`/`WARNING`/`ERROR`, defaulting to `$LOG_LEVEL` or `INFO`) and optionally tee
+  all log events to a JSONL file (one JSON object per line, loadable with
+  `pandas.read_json(path, lines=True)`). (`cli`, `loggers.configure_logging`)
+
 - **`SkipDerivative` exception**: nodes can now raise `SkipDerivative` to signal that a
   source file is intentionally not processable by a given derivative — distinct from an
   unexpected error. neurodags catches this, writes a `.skip` marker file alongside where
@@ -16,12 +35,50 @@
   which made pipeline completion state ambiguous. (`definitions.SkipDerivative`,
   `dag.run_derivative`, `neurodags.SkipDerivative`)
 
-- **`neurodags status` reports skipped derivatives**: the status table now includes a
-  *skipped* column alongside *done*, *missing*, and *errored*. Derivatives with a `.skip`
-  marker are reported as skipped — not missing — so pipeline operators can distinguish
-  "will never compute for this file" from "has not run yet". The note at the bottom of
-  the table explains what skipped means. JSON output (`--format json`) also includes the
-  skipped count per derivative. (`cli._status_classify`, `cli._cmd_status`)
+- **`neurodags dag --layout`**: new flag for HTML DAG output selecting the layout engine.
+  `elk` (default) uses orthogonal routing via ELK — requires CDN access. `dagre` uses
+  right-angle step edges with no CDN dependency — suitable for offline environments.
+  Also available as `layout=` in the Python API (`pipeline_to_html`, `derivative_to_html`,
+  `save_mermaid_html`).
+
+- **Dataset-level variables (`vars:`)**: dataset entries in `datasets.yml` can now
+  declare a `vars:` block of arbitrary key-value pairs.  Any pipeline node arg whose
+  string value matches `$identifier` is substituted with the corresponding value from
+  the active dataset entry's `vars` at runtime, after `id.N` reference resolution.
+  Only whole-string values are substituted — embedded `$` in paths or other strings
+  is left untouched.  Variables may be any YAML type (string, int, float, bool,
+  list).  Referencing an undefined variable raises `KeyError` with the list of
+  available vars.  Primary use case: encoding a condition name (or any
+  dataset-specific parameter) in the dataset entry so that activating a different
+  entry changes both `derivatives_path` and pipeline behaviour in one step, with no
+  pipeline YAML edits required.  (`definitions.DatasetConfig.vars`,
+  `dag._resolve_vars`, `dag._prep_kwargs`)
+
+- **In-memory multi-artifact selection**: when a node returns a `NodeResult` with
+  multiple artifacts (e.g. a splitter that produces one artifact per condition),
+  downstream derivatives can now select a specific artifact using the existing
+  dot-extension syntax — `derivative: SplitterName.condA.fif` — even when the
+  splitter has not yet been written to disk.  Previously this selection only worked
+  for on-disk (cached) artifacts; the in-memory path passed the full `NodeResult`
+  and relied on the `_unwrap_for_arg` heuristic, which returned the first matching
+  artifact regardless of the requested suffix.  The fix applies the same suffix
+  filter to the in-memory `NodeResult` that was already applied to on-disk
+  candidates, making both paths consistent.  A warning is logged when the requested
+  suffix is absent from the splitter's artifacts.  (`dag.run_derivative`)
+
+- **Config snapshot on `neurodags run`**: before executing any derivatives, the pipeline
+  YAML, `new_definitions` file(s), and datasets YAML are copied to
+  `derivatives_path/code/`.  A `neurodags_env.json` file is also written with the
+  installed neurodags version, git commit of the source repo (when installed from a
+  checkout), and a UTC timestamp.  Skipped on dry runs; failures are warnings, never
+  errors.  (`orchestrators._snapshot_pipeline_config`)
+
+- **TUI Status tab**: the Textual TUI gained a Status tab that displays per-derivative
+  pipeline status and errors, mirroring the `neurodags status` command. (`tui`)
+
+- **`neurodags view` renders neurokit2 figures**: the interactive `.nc`/`.fif` explorer now
+  renders neurokit2 `figure_png_hex` / `figure_rgba` artifact variables as images.
+  (`visualization`)
 
 ### Changed
 
@@ -34,6 +91,20 @@
   dependency closure — what a run actually produces), which of those are `for_dataframe`
   outputs, and `not computed by this run` for the remaining defined derivatives.
   (`cli._cmd_validate`, `cli._dependency_closure`)
+
+- **`neurodags status` exit code**: exits `1` when any derivatives are missing or errored
+  (not only errored). Enables use in CI and shell dependency chains:
+  `neurodags status pipeline.yml || sbatch resubmit.sh`.
+
+- **DAG HTML visualization uses ELK layout by default**: Mermaid diagrams now use the ELK
+  layout engine (orthogonal edge routing, crossing minimisation) instead of dagre with bezier
+  curves. Significantly cleaner for dense pipelines. Use `--layout dagre` for offline use.
+  The raw Mermaid text output (`neurodags dag` without `--html`) is unchanged.
+
+- **`neurodags count` renamed to `neurodags count-inputs`**: clarifies that the command
+  counts source (input) files the pipeline will process, not output files or derivative
+  instances. One input file may produce multiple output files depending on the derivatives.
+  All generated SLURM templates, documentation, and tests updated accordingly.
 
 ### Fixed
 
@@ -114,67 +185,14 @@
   storing, so downstream nodes always receive a proper path or `NodeResult`.
   (`dag.run_derivative`)
 
-### Changed
+- **Custom nodes available during `save=False` dataframe assembly**: `build_derivative_dataframe`
+  now loads the pipeline's `new_definitions` node modules, so `for_dataframe` derivatives that
+  use custom nodes resolve during dataframe collection instead of raising "unknown node".
+  (`orchestrators`)
 
-- **`neurodags status` exit code**: now exits `1` when any derivatives are missing or errored
-  (previously only errored triggered a non-zero exit). Enables use in CI and shell dependency
-  chains: `neurodags status pipeline.yml || sbatch resubmit.sh`.
-
-- **`neurodags status --format json`**: new flag emits machine-readable JSON with `config`,
-  `n_files`, per-derivative counts, `grand_total`, and `complete` boolean. Useful for scripted
-  post-cluster checks and quota estimation.
-
-### Changed
-
-- **DAG HTML visualization uses ELK layout by default**: Mermaid diagrams now use the ELK
-  layout engine (orthogonal edge routing, crossing minimisation) instead of dagre with bezier
-  curves. Significantly cleaner for dense pipelines. Use `--layout dagre` for offline use.
-  The raw Mermaid text output (`neurodags dag` without `--html`) is unchanged.
-
-- **`neurodags count` renamed to `neurodags count-inputs`**: clarifies that the command
-  counts source (input) files the pipeline will process, not output files or derivative
-  instances. One input file may produce multiple output files depending on the derivatives.
-  All generated SLURM templates, documentation, and tests updated accordingly.
-
-### Added
-
-- **`neurodags dag --layout`**: new flag for HTML DAG output selecting the layout engine.
-  `elk` (default) uses orthogonal routing via ELK — requires CDN access. `dagre` uses
-  right-angle step edges with no CDN dependency — suitable for offline environments.
-  Also available as `layout=` in the Python API (`pipeline_to_html`, `derivative_to_html`,
-  `save_mermaid_html`).
-
-- **Dataset-level variables (`vars:`)**: dataset entries in `datasets.yml` can now
-  declare a `vars:` block of arbitrary key-value pairs.  Any pipeline node arg whose
-  string value matches `$identifier` is substituted with the corresponding value from
-  the active dataset entry's `vars` at runtime, after `id.N` reference resolution.
-  Only whole-string values are substituted — embedded `$` in paths or other strings
-  is left untouched.  Variables may be any YAML type (string, int, float, bool,
-  list).  Referencing an undefined variable raises `KeyError` with the list of
-  available vars.  Primary use case: encoding a condition name (or any
-  dataset-specific parameter) in the dataset entry so that activating a different
-  entry changes both `derivatives_path` and pipeline behaviour in one step, with no
-  pipeline YAML edits required.  (`definitions.DatasetConfig.vars`,
-  `dag._resolve_vars`, `dag._prep_kwargs`)
-
-- **In-memory multi-artifact selection**: when a node returns a `NodeResult` with
-  multiple artifacts (e.g. a splitter that produces one artifact per condition),
-  downstream derivatives can now select a specific artifact using the existing
-  dot-extension syntax — `derivative: SplitterName.condA.fif` — even when the
-  splitter has not yet been written to disk.  Previously this selection only worked
-  for on-disk (cached) artifacts; the in-memory path passed the full `NodeResult`
-  and relied on the `_unwrap_for_arg` heuristic, which returned the first matching
-  artifact regardless of the requested suffix.  The fix applies the same suffix
-  filter to the in-memory `NodeResult` that was already applied to on-disk
-  candidates, making both paths consistent.  A warning is logged when the requested
-  suffix is absent from the splitter's artifacts.  (`dag.run_derivative`)
-
-- **Config snapshot on `neurodags run`**: before executing any derivatives, the pipeline
-  YAML, `new_definitions` file(s), and datasets YAML are copied to
-  `derivatives_path/code/`.  A `neurodags_env.json` file is also written with the
-  installed neurodags version, git commit of the source repo (when installed from a
-  checkout), and a UTC timestamp.  Skipped on dry runs; failures are warnings, never
-  errors.  (`orchestrators._snapshot_pipeline_config`)
+- **Custom node modules registered in `sys.modules` before exec**: prevents the double
+  registration that occurred when a split node-definition module was imported both by path
+  and by name. (`nodes.loader`)
 
 ## 0.1.0
 
