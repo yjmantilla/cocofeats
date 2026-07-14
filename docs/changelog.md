@@ -37,6 +37,17 @@
 
 ### Fixed
 
+- **Inspection subcommands no longer pollute stdout with logs** (#15): `status`, `validate`,
+  and `dag` write their deliverable (table / `--format json` / Mermaid) to **stdout**, but
+  framework logs — including the per-file INFO from `status`'s internal dry-run and the
+  import-time built-in derivative registration — were written to stdout too, so the result
+  was buried and `--format json` was not pipeable (even with stderr redirected, because the
+  chatter was on stdout). structlog output now routes to **stderr** (TTY/JSON detection uses
+  stderr), and a lightweight import-time bootstrap installs a stderr-routed, level-filtered
+  default *before* the built-in registration runs, so `neurodags status … --format json
+  2>/dev/null` yields a single clean JSON document. (`loggers.configure_logging`,
+  `loggers._bootstrap_quiet_default`)
+
 - **No more `fooof` DeprecationWarning on every CLI invocation** (#16): importing the node
   registry pulled in `fooof`, whose `__init__` calls `warnings.simplefilter('always')` and
   then warns about its rename to `specparam` — printing the notice to stderr on `status`,

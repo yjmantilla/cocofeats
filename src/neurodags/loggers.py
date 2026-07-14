@@ -100,7 +100,8 @@ def configure_logging(
         elif env_fmt == "console":
             json = False
         else:
-            json = not sys.stdout.isatty()
+            # Logs go to stderr, so base the pretty/JSON choice on stderr's TTY.
+            json = not sys.stderr.isatty()
 
     if log_file is not None:
         route_stdlib = True
@@ -129,7 +130,9 @@ def configure_logging(
         console_render = (
             structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
         )
-        console_handler = logging.StreamHandler(sys.stdout)
+        # Route logs to stderr so stdout carries only command output (tables,
+        # --format json, Mermaid). See #15.
+        console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(level)
         console_handler.setFormatter(
             ProcessorFormatter(
@@ -161,8 +164,9 @@ def configure_logging(
             cache_logger_on_first_use=True,
         )
     else:
-        # Simple path: structlog renders directly to stdout; no file output.
-        handler = logging.StreamHandler(sys.stdout)
+        # Simple path: structlog renders directly to stderr; no file output.
+        # stderr keeps stdout clean for command output (see #15).
+        handler = logging.StreamHandler(sys.stderr)
         handler.setLevel(level)
         handler.setFormatter(logging.Formatter("%(message)s"))
 
@@ -206,3 +210,41 @@ def get_logger(name: str | None = None, **bind):
     """
     log = structlog.get_logger(name or __name__)
     return log.bind(**bind) if bind else log
+
+
+def _bootstrap_quiet_default() -> None:
+    """Route structlog to stderr at a sane default *before* ``configure_logging``.
+
+    Import-time log calls — most notably the built-in derivative registration
+    that runs when ``neurodags.derivatives.pipeline`` is imported — would
+    otherwise hit structlog's unconfigured default, which prints every level to
+    **stdout** and pollutes command output (breaking ``--format json`` piping;
+    see #15). This installs a stderr-routed, level-filtered structlog default so
+    that chatter is filtered and never lands on stdout.
+
+    It configures only structlog (no stdlib root handler) and does **not** set
+    ``_CONFIGURED``, so :func:`configure_logging` still runs and fully
+    reconfigures logging when the CLI/app starts.
+    """
+    level = _coerce_level(os.getenv("LOG_LEVEL", "INFO"))
+    render = (
+        structlog.dev.ConsoleRenderer()
+        if sys.stderr.isatty()
+        else structlog.processors.JSONRenderer()
+    )
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso", utc=True),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            render,
+        ],
+        wrapper_class=structlog.make_filtering_bound_logger(level),
+        logger_factory=structlog.PrintLoggerFactory(file=sys.stderr),
+        cache_logger_on_first_use=False,
+    )
+
+
+_bootstrap_quiet_default()
