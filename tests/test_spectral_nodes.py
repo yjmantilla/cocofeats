@@ -2,11 +2,34 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import numpy as np
 import xarray as xr
 
 from neurodags.definitions import Artifact, NodeResult
 from neurodags.nodes.spectral import mne_spectrum, mne_spectrum_array
+
+
+def test_importing_spectral_emits_no_fooof_deprecation_warning():
+    # #16: the top-level `from fooof import FOOOF` must not surface fooof's
+    # DeprecationWarning on import (it fires on every CLI invocation otherwise).
+    # `-W always::DeprecationWarning` would show it if it were not suppressed.
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-W",
+            "always::DeprecationWarning",
+            "-c",
+            "import neurodags.nodes.spectral",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "fooof" not in result.stderr.lower()
+
 
 # ---------------------------------------------------------------------------
 # mne_spectrum (compute_psd wrapper)

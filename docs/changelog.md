@@ -37,6 +37,15 @@
 
 ### Fixed
 
+- **No more `fooof` DeprecationWarning on every CLI invocation** (#16): importing the node
+  registry pulled in `fooof`, whose `__init__` calls `warnings.simplefilter('always')` and
+  then warns about its rename to `specparam` — printing the notice to stderr on `status`,
+  `validate`, `dag`, `run`, etc. The import in `nodes/spectral.py` is now wrapped in
+  `warnings.catch_warnings(record=True)`, which swallows the notice and restores the prior
+  warning-filter state (fooof's `'always'` reset no longer leaks process-wide). neurodags
+  still depends on fooof; migration to `specparam` is tracked separately.
+  (`nodes.spectral`)
+
 - **Parallel workers can now resolve uncached inter-derivative references** (#18): YAML
   `DerivativeDefinitions` were registered only in the main process, so with `--n-jobs > 1`
   a fresh (loky) worker that had to *compute* a referenced sub-derivative — rather than
