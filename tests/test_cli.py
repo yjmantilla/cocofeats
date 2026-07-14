@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
 
 from neurodags.cli import main
+
+
+def test_importing_cli_keeps_stdout_clean():
+    # #15: import-time derivative registration must not print to stdout (it used
+    # to emit DEBUG "Registered derivative" lines via unconfigured structlog,
+    # which polluted command output and broke `--format json` piping).
+    result = subprocess.run(
+        [sys.executable, "-c", "import neurodags.cli"],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == "", f"unexpected stdout on import: {result.stdout!r}"
 
 
 def test_tui_subcommand_launches_app():
@@ -373,6 +389,31 @@ def test_status_no_files_exits_0(dummy_pipeline, capsys):
     ):
         assert main(["status", "pipeline.yml"]) == 0
     assert "No files" in capsys.readouterr().out
+
+
+def test_status_format_json_stdout_is_pure_json(dummy_pipeline, capsys):
+    # #15: `status --format json` must emit only the JSON document on stdout;
+    # framework/dry-run logs go to stderr, so the deliverable is pipeable.
+    cfg = dummy_pipeline["config"]
+    fake_df = _status_df(
+        [
+            {
+                "derivative": "BasicPrep",
+                "file_path": "a.vhdr",
+                "plan": _make_plan(cached=True, has_error=False),
+            }
+        ]
+    )
+    with (
+        patch("neurodags.cli._load_pipeline_config", return_value=cfg),
+        patch("neurodags.cli.run_pipeline", return_value=fake_df),
+    ):
+        rc = main(["status", "pipeline.yml", "--format", "json"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    payload = json.loads(out)  # stdout must parse cleanly as a single JSON document
+    assert payload["complete"] is True
+    assert "derivatives" in payload
 
 
 def test_status_prints_summary_table(dummy_pipeline, capsys):

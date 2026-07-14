@@ -1,5 +1,14 @@
 # Inspection and Visualization
 
+```{note}
+**Output streams.** The inspection commands (`status`, `validate`, `dag`) write
+their result — the table, `--format json`, or the Mermaid text — to **stdout**,
+while all framework logs go to **stderr**. So the deliverable is always clean and
+pipeable, e.g. `neurodags status pipeline.yml --format json 2>/dev/null` yields a
+single valid JSON document. Increase verbosity with `--log-level DEBUG` (still on
+stderr).
+```
+
 ## Dry Run Mode
 
 Inspect planned computations without executing any nodes. Returns a dataframe describing what would run and whether cached outputs already exist.
