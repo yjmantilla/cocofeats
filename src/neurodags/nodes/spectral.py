@@ -4,6 +4,7 @@ import json
 import math
 import os
 import time
+import warnings
 from collections.abc import Mapping, Sequence
 from itertools import permutations
 from typing import Any, Literal
@@ -11,7 +12,16 @@ from typing import Any, Literal
 import mne
 import numpy as np
 import xarray as xr
-from fooof import FOOOF
+
+# `fooof` (1.x) emits a DeprecationWarning at import announcing its rename to
+# `specparam`, and its __init__ calls ``warnings.simplefilter('always')`` first,
+# which would also clobber the process-wide warning filters. ``record=True``
+# captures (swallows) any warning raised during the import and restores the
+# prior filter state on exit, so nothing prints on every CLI invocation that
+# imports the node registry (see #16). Migration to specparam is tracked
+# separately.
+with warnings.catch_warnings(record=True):
+    from fooof import FOOOF
 
 from neurodags.definitions import Artifact, NodeResult
 from neurodags.loaders import load_meeg
