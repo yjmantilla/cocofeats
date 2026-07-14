@@ -28,12 +28,15 @@ df = pd.read_json("run.jsonl", lines=True)
 
 ## Validation
 
-Load and summarise the configuration without running anything. Prints the resolved datasets and the list of derivatives that will be executed.
+Load and summarise the configuration without running anything. Prints the resolved datasets, every derivative *defined* in the config, and the **effective run set** — the selected derivatives plus the intermediates that will be computed as their dependencies (what a `run` actually produces). Derivatives that are defined but not part of the run are listed separately, and `for_dataframe` outputs are flagged.
 
 ```bash
-neurodags validate pipeline.yml              # load config, print summary
-neurodags validate pipeline.yml -d alt.yml   # override datasets
+neurodags validate pipeline.yml                       # summary for the default run set (DerivativeList)
+neurodags validate pipeline.yml -d alt.yml            # override datasets
+neurodags validate pipeline.yml --derivative BandPower  # effective set for a specific selection
 ```
+
+Pass `--derivative` (repeatable) to preview exactly what a `run --derivative …` would compute: dependencies are auto-resolved into `computed_with_dependencies`, while anything else defined shows under `not computed by this run`.
 
 See {doc}`pipeline_yaml` for all pipeline keys and {doc}`datasets_yaml` for dataset fields.
 

@@ -23,6 +23,18 @@
   the table explains what skipped means. JSON output (`--format json`) also includes the
   skipped count per derivative. (`cli._status_classify`, `cli._cmd_status`)
 
+### Changed
+
+- **`neurodags validate` reports the effective run set instead of a misleading
+  `derivatives_enabled`** (#17): the old output printed `derivatives_enabled` equal to the
+  full `DerivativeList`, which read as "what a run computes" but ignored `--derivative`
+  selection and dependency resolution. `validate` now takes an optional `--derivative`
+  (repeatable, defaults to `DerivativeList`) and prints `run_set` (the selection),
+  `computed_with_dependencies` (the selection plus the intermediates auto-computed as its
+  dependency closure — what a run actually produces), which of those are `for_dataframe`
+  outputs, and `not computed by this run` for the remaining defined derivatives.
+  (`cli._cmd_validate`, `cli._dependency_closure`)
+
 ### Fixed
 
 - **Parallel workers can now resolve uncached inter-derivative references** (#18): YAML

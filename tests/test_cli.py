@@ -40,7 +40,46 @@ def test_validate_prints_summary(tmp_path, capsys):
     assert main(["validate", str(pipe)]) == 0
     out = capsys.readouterr().out
     assert "datasets: demo" in out
-    assert "derivatives_enabled: BasicPrep" in out
+    assert "derivatives_defined (1): BasicPrep" in out
+    assert "run_set [DerivativeList] (1): BasicPrep" in out
+    assert "computed_with_dependencies (1): BasicPrep" in out
+    # the misleading "enabled == defined" label is gone
+    assert "derivatives_enabled" not in out
+
+
+def test_validate_shows_effective_run_set_with_dependencies(tmp_path, capsys):
+    pipe = tmp_path / "pipeline.yml"
+    data = tmp_path / "datasets.yml"
+    pipe.write_text(
+        "datasets: datasets.yml\n"
+        "mount_point: null\n"
+        "DerivativeDefinitions:\n"
+        "  A: {nodes: [{id: 0, derivative: SourceFile}]}\n"
+        "  B: {nodes: [{id: 0, derivative: A.nc}]}\n"
+        "  C: {for_dataframe: true, nodes: [{id: 0, derivative: B.nc}]}\n"
+        "  Extra: {nodes: [{id: 0, derivative: SourceFile}]}\n"
+        "DerivativeList:\n"
+        "  - A\n"
+        "  - B\n"
+        "  - C\n"
+        "  - Extra\n"
+    )
+    data.write_text(
+        "demo:\n"
+        "  name: Demo\n"
+        f"  file_pattern: {tmp_path}/**/*.vhdr\n"
+        f"  derivatives_path: {tmp_path}/derivatives\n"
+    )
+
+    # Selecting only C must reveal that B and A are pulled in as dependencies,
+    # C is a for_dataframe output, and Extra is not computed by this run.
+    assert main(["validate", str(pipe), "--derivative", "C"]) == 0
+    out = capsys.readouterr().out
+    assert "run_set [--derivative] (1): C" in out
+    assert "computed_with_dependencies (3): A, B, C" in out
+    assert "pulled in as dependencies: A, B" in out
+    assert "for_dataframe outputs: C" in out
+    assert "not computed by this run (1): Extra" in out
 
 
 def test_run_uses_derivative_list_when_not_explicit(dummy_pipeline):

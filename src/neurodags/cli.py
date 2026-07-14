@@ -482,6 +482,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to a datasets YAML override.",
     )
+    validate_parser.add_argument(
+        "--derivative",
+        action="append",
+        dest="derivatives",
+        default=None,
+        help="Preview the effective run set for this derivative selection (repeat the flag "
+        "to add more). Defaults to the config's DerivativeList.",
+    )
 
     run_parser = subparsers.add_parser("run", help="Execute one or more derivatives.")
     _add_common_execution_args(run_parser)
@@ -698,18 +706,63 @@ def _cmd_tui(args: argparse.Namespace) -> int:
     return 0
 
 
+def _dependency_closure(defs: dict, selection: list[str]) -> list[str]:
+    """Return *selection* plus every derivative it transitively references.
+
+    A ``run`` recomputes each selected derivative's ``derivative:`` step
+    references (its intermediates) even though they are not listed at the top
+    level, so the closure is what a run actually computes. Only references that
+    are themselves defined derivatives are followed; ``SourceFile`` is ignored.
+    """
+    result: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in result:
+            return
+        result.add(name)
+        for step in (defs.get(name) or {}).get("nodes", []) or []:
+            ref = step.get("derivative", "")
+            if ref and ref != "SourceFile":
+                base = ref.split(".", 1)[0]
+                if base in defs and base != name:
+                    visit(base)
+
+    for name in selection:
+        visit(name)
+    return sorted(result)
+
+
 def _cmd_validate(args: argparse.Namespace) -> int:
     config = _load_pipeline_config(args.config)
     datasets, mount_point = get_datasets_and_mount_point_from_pipeline_configuration(
         args.config, datasets_input=args.datasets
     )
-    derivatives = list((config.get("DerivativeDefinitions") or {}).keys())
-    enabled = list(config.get("DerivativeList") or [])
+    defs = config.get("DerivativeDefinitions") or {}
+    defined = list(defs.keys())
+    derivative_list = list(config.get("DerivativeList") or [])
+
+    selected = list(args.derivatives) if getattr(args, "derivatives", None) else derivative_list
+    selection_source = "--derivative" if getattr(args, "derivatives", None) else "DerivativeList"
+
+    computed = _dependency_closure(defs, selected)
+    computed_set = set(computed)
+    selected_set = set(selected)
+    deps_only = [d for d in computed if d not in selected_set]
+    for_dataframe = [d for d in computed if (defs.get(d) or {}).get("for_dataframe")]
+    not_computed = [d for d in defined if d not in computed_set]
+
     print(f"config: {args.config}")
     print(f"datasets: {', '.join(datasets.keys()) or 'none'}")
     print(f"mount_point: {mount_point}")
-    print(f"derivatives_defined: {', '.join(derivatives) or 'none'}")
-    print(f"derivatives_enabled: {', '.join(enabled) or 'none'}")
+    print(f"derivatives_defined ({len(defined)}): {', '.join(defined) or 'none'}")
+    print(f"run_set [{selection_source}] ({len(selected)}): {', '.join(selected) or 'none'}")
+    print(f"computed_with_dependencies ({len(computed)}): {', '.join(computed) or 'none'}")
+    if deps_only:
+        print(f"  pulled in as dependencies: {', '.join(deps_only)}")
+    if for_dataframe:
+        print(f"  for_dataframe outputs: {', '.join(for_dataframe)}")
+    if not_computed:
+        print(f"not computed by this run ({len(not_computed)}): {', '.join(not_computed)}")
     return 0
 
 
