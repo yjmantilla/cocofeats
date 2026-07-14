@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Docs site now shows the released version**: the Docs workflow checked out without tags, so
+  hatch-vcs fell back to `0.1.dev1+g<hash>` on the published documentation. The workflow now
+  fetches full history and tags (`fetch-depth: 0`), and `docs/conf.py` displays the nearest
+  release tag (falling back to the installed dist version), so the site shows e.g.
+  `neurodags 0.3.0 (<commit>)`. (`.github/workflows/docs.yml`, `docs/conf.py`)
+
 ## 0.3.0 — 2026-07-13
 
 ### Added
