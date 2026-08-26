@@ -1,0 +1,7 @@
+# Data sources. One entry per dataset.
+#   file_pattern      : glob matching your raw recordings (change extension to your format)
+#   derivatives_path  : where preprocessed outputs (@Preprocessed.fif) are written
+my_dataset:
+  name: MyDataset
+  file_pattern: /path/to/rawdata/**/*.vhdr     # <-- change: .vhdr / .fif / .edf / ...
+  derivatives_path: /path/to/derivatives       # <-- change: output root

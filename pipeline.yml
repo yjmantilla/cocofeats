@@ -1,0 +1,27 @@
+# Preprocessing pipeline (band-pass 0.1–75 Hz, 2 s no-overlap epochs, resample 256 Hz)
+# plus an MNE Report with the band-pass spectrum before vs after, averaged across channels.
+#
+# The custom node lives in custom_nodes.py (referenced by new_definitions below).
+datasets: datasets.yml
+mount_point: null
+new_definitions: custom_nodes.py
+
+DerivativeDefinitions:
+  Preprocessed:
+    overwrite: False
+    for_dataframe: False
+    nodes:
+      - id: 0
+        derivative: SourceFile          # the raw recording for each matched file
+      - id: 1
+        node: preprocess_bandpass_report
+        args:
+          mne_object: id.0
+          l_freq: 0.1                    # band-pass high-pass
+          h_freq: 75.0                   # band-pass low-pass
+          epoch_duration: 2.0            # 2-second windows
+          epoch_overlap: 0.0             # no overlap
+          resample: 256                  # resample to 256 Hz
+
+DerivativeList:
+  - Preprocessed
